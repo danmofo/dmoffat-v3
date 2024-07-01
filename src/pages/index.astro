@@ -1,0 +1,29 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Section from '@components/Section.astro';
+import BlogPosts from '@components/BlogPosts.astro';
+---
+
+<BaseLayout title="Daniel Moffat | Developer" description="This is the description">
+    <Section title="About" id="about">
+        <p>A friendly and personable backend developer, currently working remotely for <a href="https://www.giveasyoulive.com/about-us">Give as you Live</a>, a company that builds online fundraising products for charities.</p> 
+        <p>Day-to-day I mostly write backend code (Java, Spring, Hibernate & MySQL), work on <a href="https://chrome.google.com/webstore/detail/give-as-you-live-donation/fceblikkhnkbdimejiaapjnijnfegnii?hl=en-GB">our browser extension</a> and recently have been working on a mobile app using React Native.</p>
+        <p>Outside of these technologies I'm proficient at writing JavaScript, Groovy, shell scripts and SQL. I'm able to learn new programming languages, frameworks and libraries on the job and am comfortable working on any aspect of a website/app, whether that be frontend development, deployment or diagnosing performance problems.</p>
+        <p>I care about writing code which is maintainable and performant, and most importantly, code which solves real problems, whether that be making a process quicker for an end-user, or saving a member of staff from manual, repetitive jobs.</p>
+        <p>Outside of work my hobbies include hiking, playing guitar and working out. I really enjoy spending time in the outdoors, climbing hills and exploring new places.</p>
+    </Section>
+
+    <Section title="Writing" id="writing">
+        <p>I'm experimenting with writing about things that I learn about and build in order to solidify my understanding on a subject (and maybe help someone that stumbles across it in the future).</p>
+        <BlogPosts />
+    </Section>
+
+    <Section title="Projects" id="projects">
+        <p>All of my recent work has been for the company I work for, take a look at <a href="https://donate.giveasyoulive.com">Give as you Live Donate</a> and <a href="https://www.giveasyoulive.com">Give as you Live Online</a>, chances are I built, or worked on the things you're using.</p>
+        <p>I ocassionally post my personal projects on <a href="https://www.github.com/danmofo">GitHub</a>, which mainly consists of WIP things and prototypes.</p>
+    </Section>
+
+    <Section title="Contact" id="contact">
+        <p>If you'd like to contact me, the best place is via email <b>danmofo+website[at]gmail.com</b>.</p>
+    </Section>
+</BaseLayout>

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+# Create the letsencrypt TXT DNS record for the given domain.
+#
+# The domain is passed via CERTBOT_DOMAIN env variable
+
+domain="$CERTBOT_DOMAIN"
+txt_record_value="$CERTBOT_VALIDATION"
+
+source ../.env
+
+echo "Creating TXT record for $domain"
+
+# Make sure API key is set
+if [[ "$DIGITALOCEAN_API_KEY" == "" ]]; then
+    echo "error: Could not find DIGITALOCEAN_API_KEY in .env - please add and re-run this script."
+    exit 1
+fi
+
+# When executed by certbot, a variable named 'CERTBOT_DOMAIN' gets set, if this wasn't ran by certbot 
+# (e.g. when testing), set it to a dummy value.
+if [[ "$domain" == "" ]]; then
+    echo "CERTBOT_DOMAIN variable not set, using a dummy value for testing"
+    domain="dmoffat.com"
+fi
+
+# When executed by certbot, a variable named 'CERTBOT_VALIDATION' gets set, if this wasn't ran by certbot 
+# (e.g. when testing), set it to a dummy value.
+if [[ "$txt_record_value" == "" ]]; then
+    echo "CERTBOT_VALIDATION variable not set, using a dummy value for testing"
+    txt_record_value="dummy_$(date +"%6N")"
+fi
+
+echo "Using value: $txt_record_value"
+
+curl -sS -X POST \
+    -H "Content-Type: application/json" \
+	-H "Authorization: Bearer $DIGITALOCEAN_API_KEY" \
+	-d "{\"type\":\"TXT\",\"name\":\"_acme-challenge\",\"data\":\"$txt_record_value\",\"priority\":null,\"port\":null,\"ttl\":30,\"weight\":null,\"flags\":null,\"tag\":null}" \
+	"https://api.digitalocean.com/v2/domains/$domain/records"
+
+# It can take a while for the record to be created
+sleep 20

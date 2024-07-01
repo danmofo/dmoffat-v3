@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+# Deletes the letsencrypt TXT DNS record for the given domain
+# 
+# The domain is passed via CERTBOT_DOMAIN env variable
+
+domain="$CERTBOT_DOMAIN"
+
+source ../.env
+
+echo "Deleting TXT record for $domain"
+
+# Make sure API key is set
+if [[ "$DIGITALOCEAN_API_KEY" == "" ]]; then
+    echo "error: Could not find DIGITALOCEAN_API_KEY in .env - please add and re-run this script."
+    exit 1
+fi
+
+if [[ "$domain" == "" ]]; then
+    echo "CERTBOT_DOMAIN variable not set, using a dummy value for testing"
+    domain="dmoffat.com"
+fi
+
+# Find the TXT record with a name of '._acme-challenge'
+# There may be more than 1, so just delete the first one, subsequent executions of this script
+# will deal with deleting the others.
+record_id="$(
+    curl -sS -X GET \
+        -H "Content-Type: application/json" \
+	    -H "Authorization: Bearer $DIGITALOCEAN_API_KEY" \
+	    "https://api.digitalocean.com/v2/domains/$domain/records" \
+    | jq '.domain_records[] | select(.type == "TXT" and .name == "_acme-challenge")' \
+    | jq --slurp '.[0].id'
+)"
+
+if [[ "$record_id" == "" ]]; then
+	echo "error: Couldn't get record ID from DNS records. Make sure one exists with a type of TXT and a name of '_acme-challenge'."
+	exit 1
+fi
+
+echo "Found DNS record with ID: $record_id"
+
+curl -sS -X DELETE \
+    -H "Content-Type: application/json" \
+	-H "Authorization: Bearer $DIGITALOCEAN_API_KEY" \
+	"https://api.digitalocean.com/v2/domains/$domain/records/$record_id"
+
+echo "Done deleting record"

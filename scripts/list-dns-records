@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+# List DNS records for the given domain.
+
+domain="dmoffat.com"
+
+source ../.env
+
+echo "Listing DNS records for $domain"
+
+if [[ "$DIGITALOCEAN_API_KEY" == "" ]]; then
+    echo "error: Could not find DIGITALOCEAN_API_KEY in .env - please add and re-run this script."
+    exit 1
+fi
+
+curl -sS -X GET \
+    -H "Content-Type: application/json" \
+	-H "Authorization: Bearer $DIGITALOCEAN_API_KEY" \
+	"https://api.digitalocean.com/v2/domains/$domain/records" | jq 

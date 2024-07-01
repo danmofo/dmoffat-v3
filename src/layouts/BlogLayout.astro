@@ -1,0 +1,16 @@
+---
+import PrettyDate from '@components/PrettyDate.astro';
+import BaseLayout from '@layouts/BaseLayout.astro';
+
+const { frontmatter } = Astro.props;
+---
+
+<BaseLayout title={frontmatter.title + " | Daniel Moffat"} description={frontmatter.description}>
+    <div class="post">
+        <header class="post__header">
+            <h1 class="post__title">{frontmatter.title}</h1>
+            <p class="post__metadata">Written by <b>Daniel Moffat</b> on <b><PrettyDate date={frontmatter.pubDate} /></b></p>
+        </header>
+        <slot />
+    </div>
+</BaseLayout>

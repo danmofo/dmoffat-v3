@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+# This script:
+# - Builds our local nginx container
+# - Tags it
+# - Pushes it to DigitalOcean's container registry (dmoffat)
+
+echo "Building and publishing nginx container."
+
+# Ensure doctl is installed
+if ! command -v doctl &> /dev/null; then
+    echo "error: doctl not installed, install following: https://docs.digitalocean.com/reference/doctl/how-to/install/"
+    exit 1
+fi
+
+# Authenticate with the repository
+doctl registry login --never-expire
+
+if [[ "$?" != "0" ]]; then
+    echo "error: Failed to authenticate with the registry, see error above."
+    exit 1 
+fi
+
+# Build the container
+docker build --file dockerfiles/nginx.dockerfile -t 'dmoffat-nginx' .
+
+if [[ "$?" != "0" ]]; then
+    echo "error: Failed to build the Docker container, see error above."
+    exit 1
+fi
+
+# Tag it
+docker tag dmoffat-nginx registry.digitalocean.com/dmoffat/dmoffat-nginx:latest
+
+# Push it to the container registry
+docker push registry.digitalocean.com/dmoffat/dmoffat-nginx:latest
+
+if [[ "$?" != "0" ]]; then
+    echo "error: Failed to push image to DigitalOcean repository, see error above."
+    echo "Usually this happens if you didn't setup/authenticate with doctl"
+    exit 1
+fi
+
+echo "Done building and publishing nginx container"

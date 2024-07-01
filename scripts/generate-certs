@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+# Generate the certificates using Letsencrypt. 
+#
+# How this works:
+# - --manual-auth-hook gets called once for each --domain, the manual auth hook creates a TXT record for the given domain
+# - Letsencrypt check the TXT record exists on the domain (to prove ownership/control)
+# - --manual-cleanup-hook gets called once for each --domain, the cleanup hook deletes the previously created TXT record
+certbot certonly \
+    --manual \
+    --non-interactive \
+    --agree-tos \
+    --no-eff \
+    --manual-auth-hook /scripts/create-txt-record \
+    --manual-cleanup-hook /scripts/delete-txt-record \
+    --preferred-challenges dns \
+    --email danmofo@gmail.com \
+    --domain *.dmoffat.com \
+    --domain dmoffat.com
+
+# Copy them to our mounted folder
+cp -RL /etc/letsencrypt/live/dmoffat.com/* /certs/
+
+# Make the private key readable
+chmod a=r /certs/privkey.pem

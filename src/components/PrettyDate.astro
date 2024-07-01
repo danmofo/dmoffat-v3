@@ -1,0 +1,11 @@
+---
+type Props = {
+    date: string
+}
+---
+
+<time 
+    datetime={new Date(Astro.props.date).toISOString()} 
+    class="date">
+    {new Date(Astro.props.date).toLocaleDateString('en-GB')}
+</time>

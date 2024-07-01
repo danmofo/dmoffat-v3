@@ -1,0 +1,81 @@
+---
+// Styles
+import '@public/styles/main.css'
+
+// Images
+import moiLandscape from '@assets/images/moi-landscape.png';
+import moiCircle from '@assets/images/moi-circle.png';
+
+// Optimised images
+// todo: We can use the 'widths' property to avoid duplicating the getImage call.
+const optimisedMoiLandscape768 = await getImage({
+    src: moiLandscape,
+    format: 'avif',
+    width: 768,
+    quality: 50
+});
+const optimisedMoiLandscape400 = await getImage({
+    src: moiLandscape,
+    format: 'avif',
+    width: 400,
+    quality: 50
+});
+const optimisedMoiCircle = await getImage({
+    src: moiCircle,
+    format: 'avif',
+    width: 200
+});
+
+import { getImage } from 'astro:assets';
+
+interface Props {
+    title: string,
+    description: string
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="description" content={description} />
+        <meta name="viewport" content="width=device-width" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <title>{title}</title>
+    </head>
+    <body>
+        <main>
+            <header class="sidebar">
+                <h1 class="sidebar__title">Daniel Moffat</h1>
+                <p class="sidebar__quote hidden-sm">I type into a box for a living</p>
+                <a href="/">
+                    <picture>
+                        <source 
+                            media="(min-width: 768px)" 
+                            srcset={optimisedMoiCircle.src}
+                            width="200"
+                            height="200"
+                        />
+                        <source 
+                            media="(min-width: 400px)" 
+                            width="768"
+                            srcset={optimisedMoiLandscape768.src}
+                        />
+                        <!-- Default image -->
+                        <img 
+                            src={optimisedMoiLandscape400.src} 
+                            width="400"
+                            alt="..." 
+                            class="sidebar__photo"
+                        />
+                    </picture>
+                </a>
+            </header>
+            <div class="content">
+                <slot />
+            </div>
+        </main>
+    </body>
+</html>

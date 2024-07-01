@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+echo "Generating dmoffat.com certificates."
+
+# Build the container
+docker build --file dockerfiles/letsencrypt.dockerfile -t 'dmoffat-letsencrypt' .
+
+if [[ "$?" != "0" ]]; then
+    echo "error: Failed to build the Docker container which generates certificates"
+    exit 1
+fi
+
+# Generate them
+docker run --rm -it -v ./certs/:/certs dmoffat-letsencrypt
+
+if [[ "$?" != "0" ]]; then
+    echo "error: Failed to run the Docker container which generates certificates"
+    exit 1
+fi
+
+echo "Certificates generated and available in ./certs/"
