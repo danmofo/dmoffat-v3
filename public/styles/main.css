@@ -249,6 +249,11 @@ a {
     margin-top: 20px;
 }
 
+.post img {
+    max-width: 100%;
+    height: auto;
+}
+
 .post__header {
     background-color: var(--blog-post-header-colour);
     color: #FFF;
