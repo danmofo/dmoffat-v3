@@ -10,6 +10,10 @@ const posts = await Astro.glob('../pages/writing/*/*/*.md');
 <div class="posts">
     {
         posts.map(post => {
+            if(post.frontmatter.draft) {
+                return null;
+            }
+            
             return (
                 <div class="post-preview">
                     <a class="post-preview__title" href={post.url}>{post.frontmatter.title}</a>

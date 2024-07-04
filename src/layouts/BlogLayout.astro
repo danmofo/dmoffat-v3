@@ -1,4 +1,5 @@
 ---
+import If from '@components/If.astro';
 import PrettyDate from '@components/PrettyDate.astro';
 import BaseLayout from '@layouts/BaseLayout.astro';
 
@@ -8,7 +9,7 @@ const { frontmatter } = Astro.props;
 <BaseLayout title={frontmatter.title + " | Daniel Moffat"} description={frontmatter.description}>
     <div class="post">
         <header class="post__header">
-            <h1 class="post__title">{frontmatter.title}</h1>
+            <h1 class="post__title">{frontmatter.title} <If condition={!!frontmatter.draft}>(draft)</If></h1>
             <p class="post__metadata">Written by <b>Daniel Moffat</b> on <b><PrettyDate date={frontmatter.pubDate} /></b></p>
         </header>
         <slot />
