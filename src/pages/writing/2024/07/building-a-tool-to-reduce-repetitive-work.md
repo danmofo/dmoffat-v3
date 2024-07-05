@@ -3,7 +3,6 @@ layout: '@layouts/BlogLayout.astro'
 title: 'Building a tool to reduce repetitive work'
 pubDate: 2024-07-04 19:47
 description: 'Walking through how I used programming to reduce the amount of repetitive work I have to do.'
-draft: true
 ---
 
 - [Introduction](#introduction)
@@ -20,6 +19,7 @@ draft: true
   - [Merging template model with the template](#merging-template-model-with-the-template)
   - [Creating the HTML pages](#creating-the-html-pages)
   - [Copying the text automatically](#copying-the-text-automatically)
+  - [Final touches](#final-touches)
 - [Future enhancements](#future-enhancements)
 - [Source code](#source-code)
 
@@ -327,22 +327,106 @@ walks.forEach(async walk => {
 });
 ```
 
-The end result is the `output` folder containing a bunch of HTML files, here's an example of one:
+The end result is the `output` folder containing a bunch of HTML files (one for each walk), here's an example of one:
 
 ![alt](../../../../assets/images/wmwg-article/example-template.png)
 
-We're almost there now, all that's left to do is add some more things to the template that need to be filled in.
+We're almost there now, all that's left to do is add some more things to the template that need to be filled in on Meetup and add the copy text functionality.
 
 ### Copying the text automatically
 
-I know you can copy text programatically with JavaScript, so I wanted to see if I could add this functionality to my template files.
+Next I wanted to add copy functionality to the template, so I could click a button for each thing I need to copy, then paste it over on Meetup website.
 
-todo:
+I'm not very familiar with the native DOM APIs for manipulating the clipboard so I modified some code I found on Stackoverflow and added it to the template in a `<script>` tag:
 
+```html
+<script>
+    window.addEventListener('load', () => {
+        const buttons = document.querySelectorAll('button');
+
+        buttons.forEach(button => {
+            button.addEventListener('click', e => {
+                const clickedButton = e.currentTarget;
+                const originalText = clickedButton.textContent;
+                
+                const { selectorToCopy } = e.currentTarget.dataset;
+                copyWithStyle(selectorToCopy);
+                clickedButton.textContent = 'Copied!'
+
+                setTimeout(() => {
+                    clickedButton.textContent = originalText;
+                }, 1000);
+            });
+        });
+    });
+    
+
+    function copyWithStyle(selector) {
+        console.log(`Copying ${selector} contents to clipboard.`);
+        const elementToCopy = document.querySelector(selector);
+
+        const range = document.createRange();
+        range.selectNodeContents(elementToCopy);
+
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        document.execCommand('copy');
+        selection.removeAllRanges();
+    }
+</script>
+```
+
+Now when you click a button, it copies the text from the selector inside the button's `data-selector-to-copy` attribute to your clipboard, changes the button text to "Copied!", then changes it back to its original value afterward.
+
+> **Side note** Obviously, I would never usually write JS inline like this, it's just the simplest way to add this functionality to my templates without introducing a separate script file.
+
+### Final touches
+
+The last thing I wanted was a way to view all of the templates in the browser.
+
+When you open a folder in your browser, it shows you a tree view of the files in that directory. Rather than building an index page for all of these templates, I wanted to make use of the built in file browser.
+
+The problem is that the walks were not sorted by their start date, so appeared in a random order, to fix this I had to:
+- Sort the walks by start date ascending
+- Add an incrementing number prefix to each file (e.g. 001, 002, 003) so they appear in order (file names are sorted alphabetically)
+
+The code looks like: 
+
+```ts
+walks.sort((a, b) => {
+    return a.basics.walkDate.date.localeCompare(b.basics.walkDate.date);
+});
+```
+
+To sort the walks and:
+
+```ts
+const filePrefix = pad(index.toString(), 3, {char: '0', side: 'left'});
+const outputPath = `./output/${filePrefix}_${template.model.title}.html
+```
+
+To add a prefix to the files.
+
+Once I did that, it now looks like this:
+
+![alt](../../../../assets/images/wmwg-article/tree-view.png)
+
+After finishing I did a few more things:
+- Added a link to the original walk on the WMWG website
+- Added the original walk JSON used to generate the template to the template (for debugging)
+- Added some styles
+
+Final result:
+
+![alt](../../../../assets/images/wmwg-article/finished-template.png)
+
+And that's it! In a few hours (+ time taken to write this post...) I've built something that will save me a few hours every 3 months.
 
 ## Future enhancements
 
-I could write a browser extension which would let you select a walk, then attempt to fill in all the inputs on the page, instead of having to copy/paste them myself, maybe that's something I'll do at a later date...
+I could write a browser extension which would let you select a walk, then attempt to fill in all the inputs on the page, instead of having to copy/paste them manually. This would be as close to an ideal solution as I can get, but would take a little bit of time...maybe something for another day.
 
 ## Source code
 
