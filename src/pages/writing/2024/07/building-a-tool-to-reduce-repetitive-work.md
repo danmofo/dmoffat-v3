@@ -14,7 +14,14 @@ draft: true
   - [Getting started](#getting-started)
   - [Extracting the data from the website](#extracting-the-data-from-the-website)
   - [Combining walk data with templates](#combining-walk-data-with-templates)
+  - [Making the template dynamic](#making-the-template-dynamic)
+  - [Making sure it pastes correctly](#making-sure-it-pastes-correctly)
+  - [Mapping template variables to walk data](#mapping-template-variables-to-walk-data)
+  - [Merging template model with the template](#merging-template-model-with-the-template)
+  - [Creating the HTML pages](#creating-the-html-pages)
+  - [Copying the text automatically](#copying-the-text-automatically)
 - [Future enhancements](#future-enhancements)
+- [Source code](#source-code)
 
 
 ## Introduction
@@ -173,9 +180,16 @@ Found 16 walks.
 
 Now we have a list of walks, we need to combine them with our Meetup template, our template looks something like this:
 
+```html
+<p>Walk description goes here</p>
+
+<strong>🔍 How to find us</strong>
+<p>Meet at 10:30 at Dover's Hill Car Park</p>
+<p>Postcode: <strong>GL55 6UN</strong></p>
+<p>Google Maps: <a href="https://www.google.com/maps/dir/Current+Location/52.052817,-1.801972">https://www.google.com/maps/dir/Current+Location/52.052817,-1.801972</a>
 ```
-Add bit of template here.
-```
+
+> **Side note** the template is HTML because the input field on Meetup's website is a rich text editor, so in order to retain formatting and links, we need to copy/paste HTML, rather than plain text.
 
 Roughly, the process will involve:
 - Reading a template file
@@ -185,8 +199,153 @@ Roughly, the process will involve:
   - ...and so on.
 - Writing the finished template out to a HTML file with buttons to copy the text for each walk.
 
-todo...
+### Making the template dynamic
+
+First we'll need to edit our template, and replace all the dynamic parts with our template tags, in this case I'm going to use `{curly_braces_with_lowercase_name}`:
+
+```html
+<p>{description}</p>
+
+<strong>🔍 How to find us</strong>
+<p>Meet at {start_time} at {start_point}</p>
+<p>Postcode: <strong>{postcode}</strong></p>
+<p>Google Maps: <a href="{google_maps_url}">{google_maps_url}</a>
+
+<!-- Rest of template ... ->
+```
+
+### Making sure it pastes correctly
+
+Meetup has a rich-text editor which means when you paste formatted text (e.g. bold, italic, links, etc), it retains the formatting. If you paste HTML, it pastes it literally.
+
+After modifying the template, I pasted it into Meetup to make sure it rendered correctly:
+
+![alt](../../../../assets/images/wmwg-article/rich-text-editor.png)
+
+I noticed that the input didn't respect paragraphs, so I had to add a bunch of `<br>` tags to force a new line. This took a little bit of back and forth, but eventually I managed to get the formatting matching the original.
+
+### Mapping template variables to walk data
+
+Now we have a list of variables we need to substitute, we'll need to see how those map to the walk data we extracted previously.
+
+To get a list of variables from our template that we need to map, we can search the file using a regular expression search in VSCode `\{.+?\}`, then use CTRL + SHIFT + L to select them all, this produces the following:
+
+```
+{description}
+{start_time}
+{start_point}
+{postcode}
+{google_maps_url}
+{parking_text}
+{food_text}
+{walk_difficulty_text}
+{dog_text}
+{ramblers_contact_url}
+```
+
+Next we need to write a mapping function that takes a `Walk` and maps it to a `TemplateModel`:
+
+```ts
+import { Walk } from "./extract-walk-data"
+
+export type TemplateModel = {
+    description: string,
+    start_time: string,
+    start_point: string,
+    postcode: string,
+    google_maps_url: string,
+    parking_text: string,
+    food_text: string,
+    walk_difficulty_text: string,
+    dog_text: string,
+    ramblers_contact_url: string
+}
+
+export default function mapWalkToTemplateModel(walk: Walk): TemplateModel {
+    // todo
+    return {
+        description: '',
+        start_time: '',
+        start_point: '',
+        postcode: '',
+        google_maps_url: '',
+        parking_text: '',
+        food_text: '',
+        walk_difficulty_text: '',
+        dog_text: '',
+        ramblers_contact_url: ''
+    }
+}
+```
+
+After a little while I managed to map everything, along with coming to the realisation that the data is not perfect, and some manual editing will be required - for example some leaders don't let you know what dogs are welcome, or they do, but they put it in a non-standard field, making it difficult to figure out.
+
+### Merging template model with the template
+
+Now we have the model data, and the template, we need to merge them together. We use a primitive method (good ol' `replaceAll` for each property in our model) to create it. Remember - this is a throwaway tool, and there's at most 20 walks to process.
+
+The code looks like this:
+
+```ts
+import { TemplateModel } from "./map-walk-to-template-model.ts";
+
+export type MergedTemplate = {
+    model: TemplateModel,
+    html: string
+}
+
+export default function mergeModelWithTemplate(templateHtml: string, model: TemplateModel): MergedTemplate {
+    let html = templateHtml;
+
+    for (const [key, value] of Object.entries(model)) {
+        html = html.replaceAll(`{${key}}`, value);
+    }
+
+    return {
+        model: model,
+        html: html
+    }
+}
+```
+
+### Creating the HTML pages
+
+Now we've created everything, let's update `main.ts` to include these new functions, and actually save the merged template to HTML files:
+
+```ts
+const walks = await extractWalkData('https://www.wmwg.org.uk/walks.html');
+console.log(`Found ${walks.length} walks.`);
+
+const templateHtml = await Deno.readTextFile('./template.html');
+
+walks.forEach(async walk => {
+    const templateModel = mapWalkToTemplateModel(walk);
+    const template = mergeModelWithTemplate(templateHtml, templateModel);
+    const outputPath = `./output/${template.model.title}.html`;
+    
+    await Deno.writeFile(outputPath, new TextEncoder().encode(template.html));
+});
+```
+
+The end result is the `output` folder containing a bunch of HTML files, here's an example of one:
+
+![alt](../../../../assets/images/wmwg-article/example-template.png)
+
+We're almost there now, all that's left to do is add some more things to the template that need to be filled in.
+
+### Copying the text automatically
+
+I know you can copy text programatically with JavaScript, so I wanted to see if I could add this functionality to my template files.
+
+todo:
+
 
 ## Future enhancements
 
-To fully automate this process, I could write a browser extension which would automatically fill in the relevant form inputs for me, instead of having to copy/paste them myself.
+I could write a browser extension which would let you select a walk, then attempt to fill in all the inputs on the page, instead of having to copy/paste them myself, maybe that's something I'll do at a later date...
+
+## Source code
+
+You can find the full source code [on my GitHub](https://github.com/danmofo/wmwg-meetup-event-generator)
+
+Bye for now.
