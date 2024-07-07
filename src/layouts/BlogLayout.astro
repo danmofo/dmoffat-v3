@@ -12,6 +12,11 @@ const { frontmatter } = Astro.props;
             <h1 class="post__title">{frontmatter.title} <If condition={!!frontmatter.draft}>(draft)</If></h1>
             <p class="post__metadata">Written by <b>Daniel Moffat</b> on <b><PrettyDate date={frontmatter.pubDate} /></b></p>
         </header>
+        <If condition={!!frontmatter.draft}>
+            <div class="draft-warning">
+                <p>This post is a draft, and is still being worked on.</p>
+            </div>
+        </If>
         <slot />
     </div>
 </BaseLayout>

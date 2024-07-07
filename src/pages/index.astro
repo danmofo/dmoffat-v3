@@ -15,12 +15,15 @@ import BlogPosts from '@components/BlogPosts.astro';
 
     <Section title="Writing" id="writing">
         <p>I'm experimenting with writing about things that I learn about and build in order to solidify my understanding on a subject (and maybe help someone that stumbles across it in the future).</p>
-        <BlogPosts />
+        <BlogPosts 
+            excludeDrafts={!import.meta.env.DEV} 
+            maxPosts={3} 
+        />
     </Section>
 
     <Section title="Projects" id="projects">
         <p>All of my recent work has been for the company I work for, take a look at <a href="https://donate.giveasyoulive.com">Give as you Live Donate</a> and <a href="https://www.giveasyoulive.com">Give as you Live Online</a>, chances are I built, or worked on the things you're using.</p>
-        <p>I ocassionally post my personal projects on <a href="https://www.github.com/danmofo">GitHub</a>, which mainly consists of WIP things and prototypes.</p>
+        <p>I post my personal projects on <a href="https://www.github.com/danmofo">GitHub</a>, which mainly consists of WIP things and prototypes.</p>
     </Section>
 
     <Section title="Contact" id="contact">

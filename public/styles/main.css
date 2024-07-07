@@ -27,6 +27,9 @@
     --post-preview-background-colour-2: hsl(323.5deg 57.43% 50%);
     --post-preview-background-hover-colour-2: hsl(323.5deg 57.43% 55%);
 
+    --draft-warning-background-colour: #c93636;
+    --draft-warning-text-colour: #fff;
+
     /* Sizes, inspired by https://www.joshwcomeau.com/css/surprising-truth-about-pixels-and-accessibility/ */
     --14px: 0.875rem;
     --16px: 1rem;
@@ -122,7 +125,6 @@ a {
 */
 
 /* Sidebar */
-
 .sidebar {
     display: flex;
     flex-wrap: wrap;
@@ -307,8 +309,20 @@ blockquote {
     padding-inline-end: 30px;
 }
 
-blockquote>p {
+blockquote > p {
     margin: 0;
+}
+
+.draft-warning {
+    background-color: var(--draft-warning-background-colour);
+    color: var(--draft-warning-text-colour);
+    margin-top: 15px;
+    margin-bottom: 15px;
+    padding: 20px;
+}
+
+.draft-warning p {
+    margin-bottom: 0;
 }
 
 /*

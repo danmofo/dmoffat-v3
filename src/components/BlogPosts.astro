@@ -1,8 +1,16 @@
 ---
+import If from "./If.astro";
 import PrettyDate from "./PrettyDate.astro";
 
-// todo: Limit to 3 posts
-const posts = await Astro.glob('../pages/writing/*/*/*.md');
+type Props = {
+    excludeDrafts: boolean,
+    maxPosts: number
+}
+
+const { excludeDrafts, maxPosts } = Astro.props;
+
+const allPosts = await Astro.glob('../pages/writing/*/*/*.md');
+const posts = allPosts.slice(0, Math.min(allPosts.length, maxPosts));
 ---
 
 <p>Here are my latest posts:</p>
@@ -10,13 +18,13 @@ const posts = await Astro.glob('../pages/writing/*/*/*.md');
 <div class="posts">
     {
         posts.map(post => {
-            if(post.frontmatter.draft) {
+            if(excludeDrafts && post.frontmatter.draft) {
                 return null;
             }
             
             return (
                 <div class="post-preview">
-                    <a class="post-preview__title" href={post.url}>{post.frontmatter.title}</a>
+                    <a class="post-preview__title" href={post.url}>{post.frontmatter.title} <If condition={post.frontmatter.draft}>(draft)</If></a>
                     <PrettyDate date={post.frontmatter.pubDate} />
                     <p class="post-preview__desc">{post.frontmatter.description}</p>
                 </div>
