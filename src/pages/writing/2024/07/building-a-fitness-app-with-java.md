@@ -18,6 +18,7 @@ draft: true
   - [Planning the app's functionality](#planning-the-apps-functionality)
   - [Designing the database schema](#designing-the-database-schema)
   - [Designing the app flow](#designing-the-app-flow)
+- [Conclusion](#conclusion)
 
 ## The problem
 
@@ -210,7 +211,7 @@ migrations:
 
 Then ran it using `docker compose up migrations` which gave the following output:
 
-```\
+```
 $ docker compose up migrations 
 [+] Building 0.0s (0/0)                                                                                                      
 [+] Running 1/0
@@ -399,15 +400,20 @@ At work we use AWS Systems Manager Parameter Store to manage secrets. For this p
 First let's create a template file containing all of the variables we'll need:
 
 ```bash
-# These are for our app
+# Spring app
 DB_HOST=
 DB_USER=
 DB_PASSWORD=
 
-# These are for our 'db' container
-MYSQL_ROOT_USER_PASSWORD=
+# MySQL container
+MYSQL_ROOT_PASSWORD=
 MYSQL_USER=
-MYSQL_USER_PASSWORD=
+MYSQL_PASSWORD=
+
+# Flyway config
+FLYWAY_URL=
+FLYWAY_USER=
+FLYWAY_PASSWORD=
 ```
 
 Then let's copy this into `.env` and fill in the variables, then add it to `.gitignore`.
@@ -417,15 +423,225 @@ There are three places where we need to remove the plain-text values, and replac
 - Flyway config (`flyway.conf`)
 - DB service config (`docker-compose.yml`)
 
+The app config now looks like:
+
+```properties
+spring.datasource.url=jdbc:mysql://${DB_HOST}/
+spring.datasource.username=${DB_USER}
+spring.datasource.password=${DB_PASSWORD}
+```
+
+For Flyway, I removed `flyway.conf`, and added the following to `docker-compose.yml`:
+
+```yaml
+services:
+  migrations:
+    # ...
+    env_file:
+      - './.env'
+    # ...
+```
+
+And added something similar for our DB config:
+
+```yaml
+services:
+  db:
+    # ...
+    env_file:
+      - './.env'
+    # ...
+```
+
+Once I changed these, I made sure everything still works by recreating the DB service, running the app and performing a migration.
 
 ### Planning the app's functionality
 
-todo
+At a basic level, the app needs to allow me to do the following:
+- Register and log in
+- Track my weight each day
+- Track my workouts by recording:
+  - The date and time of my workout
+  - The weight lifted
+  - The number of sets
+  - The number of repetitions
+  - The name of the exercise
+  - The type of exercise (e.g. freeweight vs machine)
+  - Any equipment used (e.g. weightlifting belt, straps, resistance bands, etc)
+  - If a machine exercise, the brand/model of the machine
+  - Notes for individual set
+  - Notes for the workout as a whole
+
+This is the core functionality, other things can be added afterwards.
 
 ### Designing the database schema
 
-todo
+I've already created a database schema for an app extremely similar to this, but it had some issues and it doesn't fulfil the functionality mentioned above.
+
+> **Side note:** this won't be the final design, we'll almost certainly add/remove columns as I go along, and when we get that far, I'll look at adding indexes and other DB optimisations.
+
+First let's start with a simple `user` table to store our users:
+
+```sql
+create table ft.user (
+    id int unsigned auto_increment,
+    email varchar(50) not null,
+    `password` varchar(255) not null,
+    created_on timestamp default current_timestamp,
+    updated_on timestamp default current_timestamp on update current_timestamp,
+    primary key(id),
+    unique (email)
+);
+```
+
+This fulfils the following functionality:
+- Register and log in
+
+Next, we'll need a table to store our weight:
+
+```sql
+create table ft.body_weight (
+    id int unsigned auto_increment,
+    user_id int unsigned not null,
+    logged_on date default current_date,
+    primary key(id),
+    foreign key(user_id) references ft.user(id)
+);
+```
+
+Each row has an associated user, so we can track weight for each user.
+
+This fulfils the following functionality:
+- Tracking my weight each day
+
+Next, we'll need a table to store our workouts:
+
+```sql
+create table ft.workout (
+    id int unsigned auto_increment,
+    user_id int unsigned not null,
+    notes text null,
+    started_on datetime not null,
+    finished_on datetime null,
+    created_on timestamp default current_timestamp,
+    updated_on timestamp default current_timestamp on update current_timestamp,
+    primary key(id),
+    foreign key(user_id) references ft.user(id)
+);
+```
+
+Each row has an associated user, so we can list workouts by user, amongst other things.
+
+This fulfils the following functionality:
+- Recording the date and time of the workout
+- Recording notes for the workout as a whole
+
+Next, we'll need a reference table to store exercises:
+
+```sql
+create table ft.exercise (
+    id int unsigned auto_increment,
+    `name` text not null,
+    brand text null,
+    `type` varchar(20) not null default 'FREE_WEIGHT',
+    primary key(id)
+);
+```
+
+Some examples:
+- A free weight backsquat would be stored as `('Barbell Back Squat', null, 'FREE_WEIGHT')`
+- A machine bench press would be stored as `('Bench press', 'Matrix', 'MACHINE')`
+
+This fulfils the following functionality:
+- Record the name of the exercise
+- Record the type of the exercise
+- Record the brand of the machine
+
+We use an auto incrementing ID - we could use a composite primary key, as `name`, `brand` and `type` uniquely identify each exercise, but it would mean any referencing tables would need to join on all three columns, which is messy.
+
+Finally, we'll need a table to record the exercises performed during the workout:
+
+```sql
+create table ft.workout_exercise (
+    id int unsigned auto_increment,
+    workout_id int unsigned not null,
+    exercise_id int unsigned not null,
+    `weight` int unsigned not null default 1,
+    `sets` int not null default 1,
+    reps int not null default 0,
+    notes text null,
+    equipment json default null,
+    created_on timestamp default current_timestamp,
+    updated_on timestamp default current_timestamp on update current_timestamp,
+    primary key(id),
+    foreign key(workout_id) references ft.workout(id),
+    foreign key(exercise_id) references ft.exercise(id)
+);
+```
+
+Each row has an associated workout and exercise. The primary key is an auto incrementing ID, as you may perform various configurations of weight/sets/reps for a specific exercise, for example, you may perform (sets x reps):
+- 3 x 5 @ 100KG
+- 2 x 10 @ 80KG
+
+This fulfils the following functionality:
+- Recording the number of sets/reps
+- Recording the weight
+- Notes for an individual set
+
+That's it - the structure is fairly simple and fulfils all of the functionality I outlined at the beginning. I added the SQL to some migrations and ran them using `./migrate`:
+
+```
+$ ./migrate 
+[+] Building 0.0s (0/0)                                                                                                      
+[+] Running 1/0
+ ✔ Container migrations  Created                                                                                        0.0s 
+Attaching to migrations
+migrations  | WARNING: Storing migrations in 'sql' is not recommended and default scanning of this location may be deprecated in a future release
+migrations  | Flyway Community Edition 10.15.2 by Redgate
+migrations  | 
+migrations  | See release notes here: https://rd.gt/416ObMi
+migrations  | Database: jdbc:mysql://db:3306/ft (MySQL 8.0)
+migrations  | Schema history table `ft`.`flyway_schema_history` does not exist yet
+migrations  | Successfully validated 2 migrations (execution time 00:00.017s)
+migrations  | Creating Schema History table `ft`.`flyway_schema_history` ...
+migrations  | Current version of schema `ft`: << Empty Schema >>
+migrations  | Migrating schema `ft` to version "1 - create user table"
+migrations  | Migrating schema `ft` to version "2 - create exercise tables"
+migrations  | Successfully applied 2 migrations to schema `ft`, now at version v2 (execution time 00:00.519s)
+migrations  | 
+migrations  | You are not signed in to Flyway, to sign in please run auth
+migrations exited with code 0
+
+```
+
+At this stage I also like to try and write some queries to see how using the tables is like, for example:
+- List the total volume of weight for a given exercise in a workout
+- Get the maximum weight lifted for a specific exercise
 
 ### Designing the app flow
 
-todo
+The app flow will dictate what APIs I need to build. I like to do it in text format rather than start prototyping straight away.
+
+The flow will look like:
+- User will be shown the **splash screen**
+- User will land on the **login screen**
+    - If the user has an account, they will authenticate using an email/password
+    - If the user does not have an account, they will create one on the **register screen**
+- After authenticating, the user will be sent to the **dashboard screen**
+- From the **dashboard screen**, the user can:
+  - Start a new workout, which takes them to the **new workout screen**, on this screen:
+    - User will start their workout
+    - User will add a exercise, along with sets and reps performed
+    - After adding all the exercises, user will enter some notes and end the workout
+  - Log their weight for today, which takes them to the **log weight screen** on this screen:
+    - User will enter their weight
+
+I think that's it for now, it fulfils all of the functionality I spoke about before.
+
+## Conclusion
+
+We've got a lot accomplished so far, we've created a database service (with migrations), a basic Java app, designed the database structure and got an intial idea of the app's flow.
+
+In the next part we'll start building our backend API with Java.
+
+[Bye for now](https://www.youtube.com/watch?v=JgFvNzLAWtY)
