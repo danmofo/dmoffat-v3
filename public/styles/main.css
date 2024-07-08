@@ -233,6 +233,10 @@ a {
     Blog posts
 */
 
+.post {
+    padding-bottom: 50px;
+}
+
 .post ul {
     margin-top: 0;
     margin-bottom: 15px;
