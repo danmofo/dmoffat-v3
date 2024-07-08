@@ -3,7 +3,6 @@ layout: '@layouts/BlogLayout.astro'
 title: 'Part one - Building a fitness tracking app with Java'
 pubDate: 2024-07-07
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
-draft: true
 ---
 
 - [The problem](#the-problem)
