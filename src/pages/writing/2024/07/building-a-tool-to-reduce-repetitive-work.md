@@ -2,7 +2,7 @@
 layout: '@layouts/BlogLayout.astro'
 title: 'Building a tool to reduce repetitive work'
 pubDate: 2024-07-04 19:47
-description: 'Walking through how I used programming to reduce the amount of repetitive work I have to do.'
+description: 'How I used programming to reduce the amount of repetitive work I have to do to a quarterly task.'
 ---
 
 - [Introduction](#introduction)

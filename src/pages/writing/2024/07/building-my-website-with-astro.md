@@ -615,7 +615,7 @@ The end result will be a bunch of files we can use in our nginx container to ser
 
 This is straightforward, create a `Dockerfile` and copy our scripts created in the previous step:
 
-```Dockerfile
+```docker
 FROM alpine:3.20.1
 
 RUN apk add certbot curl jq bash

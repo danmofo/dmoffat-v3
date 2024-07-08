@@ -30,6 +30,9 @@
     --draft-warning-background-colour: #c93636;
     --draft-warning-text-colour: #fff;
 
+    --inline-code-background-colour: #222222;
+    --inline-code-text-colour: #9CDCFE;
+
     /* Sizes, inspired by https://www.joshwcomeau.com/css/surprising-truth-about-pixels-and-accessibility/ */
     --14px: 0.875rem;
     --16px: 1rem;
@@ -289,6 +292,19 @@ hr {
 pre {
     padding: 20px;
     font-size: var(--14px);
+}
+
+code {
+    background-color: var(--inline-code-background-colour);
+    color: var(--inline-code-text-colour);
+    font-size: 85%;
+    padding: 2px 4px;
+    border-radius: 5px;
+}
+
+pre code {
+    font-size: 100%;
+    padding: 0;
 }
 
 /* Quotes */

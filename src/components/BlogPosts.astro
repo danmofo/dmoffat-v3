@@ -24,7 +24,7 @@ const posts = allPosts.slice(0, Math.min(allPosts.length, maxPosts));
             
             return (
                 <div class="post-preview">
-                    <a class="post-preview__title" href={post.url}>{post.frontmatter.title} <If condition={post.frontmatter.draft}>(draft)</If></a>
+                    <a class="post-preview__title" href={post.url}>{post.frontmatter.title}<If condition={post.frontmatter.draft}> (draft)</If></a>
                     <PrettyDate date={post.frontmatter.pubDate} />
                     <p class="post-preview__desc">{post.frontmatter.description}</p>
                 </div>

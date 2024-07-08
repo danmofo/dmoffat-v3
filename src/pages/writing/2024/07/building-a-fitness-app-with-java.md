@@ -2,9 +2,22 @@
 layout: '@layouts/BlogLayout.astro'
 title: 'Part one - Building a fitness tracking app with Java'
 pubDate: 2024-07-07
-description: 'How I built a fitness tracking app using Java, MySQL and React Native'
+description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
 draft: true
 ---
+
+- [The problem](#the-problem)
+- [The idea](#the-idea)
+- [Building it](#building-it)
+  - [Setting up the project](#setting-up-the-project)
+  - [Setting up the database](#setting-up-the-database)
+  - [Setting up database migrations](#setting-up-database-migrations)
+  - [Building + running the app](#building--running-the-app)
+  - [Running the tests](#running-the-tests)
+  - [Setting up secrets](#setting-up-secrets)
+  - [Planning the app's functionality](#planning-the-apps-functionality)
+  - [Designing the database schema](#designing-the-database-schema)
+  - [Designing the app flow](#designing-the-app-flow)
 
 ## The problem
 
@@ -141,7 +154,7 @@ Now that the database is running, we'll need to update our Java app to connect t
 
 I added the following to `application.properties`:
 
-```conf
+```properties
 spring.datasource.url=jdbc:mysql://<db_host>
 spring.datasource.username=<db_user>
 spring.datasource.password=<db_password>
@@ -155,6 +168,264 @@ I then started my app (through the IDE) and made sure it connected to the databa
 
 At work we use a homegrown migration system which runs Groovy scripts. For this project I'm going to use Flyway, a Java-based database migration tool that handles migrations with plain SQL. I wanted to use something that's a bit more standardised and could be used on multiple projects.
 
-After installing it, I wrote my first migration:
+To install, I downloaded their Docker container like this:
 
-todo: Install it
+```bash
+docker pull redgate/flyway:10.15.2-alpine
+```
+I chose this method as it makes it easier to manage on multiple systems without needing to install it separately on each.
+
+Then to run it:
+
+```bash
+docker run --rm redgate/flyway:10.15.2-alpine
+```
+
+It works, but we need to make the migrations and configuration file visible:
+
+```bash
+docker run --rm \
+  -v ./db/migrations:/flyway/sql \
+  -v ./db/flyway.conf:/flyway/conf/flyway.conf \
+  redgate/flyway:10.15.2-alpine
+```
+
+This fails, as the Flyway container cannot "see" the database container. There are a few ways we can get around this:
+1. Use a fixed IP for the DB container, and use that in the Flyway config file.
+2. Give the db container a `hostname` and add a Flyway container to `docker-compose.yml`, then reference the hostname in our config file. When we start the Flyway container, the `db` containers IP will be added to `/etc/hosts` with the hostname we specified.
+
+I went with #2, so we can references containers from other containers with a name, instead of a fixed IP.
+
+I added the following to `docker-compose.yml`:
+
+```yaml
+migrations:
+  image: redgate/flyway:10.15.2-alpine
+  container_name: migrations
+  command: 'migrate'
+  volumes:
+    - ./db/flyway.conf:/flyway/conf/flyway.conf
+    - ./db/migrations:/flyway/sql
+```
+
+Then ran it using `docker compose up migrations` which gave the following output:
+
+```\
+$ docker compose up migrations 
+[+] Building 0.0s (0/0)                                                                                                      
+[+] Running 1/0
+ ✔ Container migrations  Created                                                                                        0.0s 
+Attaching to migrations
+migrations  | Flyway Community Edition 10.15.2 by Redgate
+migrations  | 
+migrations  | See release notes here: https://rd.gt/416ObMi
+migrations  | Database: jdbc:mysql://db:3306 (MySQL 8.0)
+migrations  | ERROR: Unable to determine schema for the schema history table. Set a default schema for the connection or specify one using the 'defaultSchema' property
+```
+This means it's working, just that there isn't a schema defined for it to create a migrations table.
+
+We're going to modify our `db` container definition slightly so that it creates a schema when the database it initialised for the first time:
+
+```yaml
+environment:
+  MYSQL_DATABASE: ft
+```
+
+Because our database is already initialised, we'll need to delete our data directory (`db/data/`) and recreate the database with `docker compose up -d db`. We'll also create script named `delete-db` which performs these steps incase we have to do it again in the future.
+
+Then, update our `flyway.conf` to include the database in the connection string like:
+
+```
+flyway.url=jdbc:mysql://db:3306/ft
+```
+
+Running `docker compose up migrations` now produces a different error:
+
+```
+$ ./migrate
+[+] Building 0.0s (0/0)                                                                                                      
+[+] Running 1/0
+ ✔ Container migrations  Created                                                                                        0.0s 
+Attaching to migrations
+migrations  | Flyway Community Edition 10.15.2 by Redgate
+migrations  | 
+migrations  | See release notes here: https://rd.gt/416ObMi
+migrations  | ERROR: Unable to obtain connection from database (jdbc:mysql://db:3306/ft) for user 'root': Could not connect to address=(host=db)(port=3306)(type=master) : RSA public key is not available client side (option serverRsaPublicKeyFile not set)
+migrations  | -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+migrations  | SQL State  : S1009
+migrations  | Error Code : 0
+migrations  | Message    : Could not connect to address=(host=db)(port=3306)(type=master) : RSA public key is not available client side (option serverRsaPublicKeyFile not set)
+migrations  | 
+migrations  | Caused by: java.sql.SQLTransientConnectionException: Could not connect to address=(host=db)(port=3306)(type=master) : RSA public key is not available client side (option serverRsaPublicKeyFile not set)
+migrations  | Caused by: java.sql.SQLException: RSA public key is not available client side (option serverRsaPublicKeyFile not set)
+migrations exited with code 1
+```
+
+Without looking too deeply into this, we can suppress the error by adding the following to our `db` service in `docker-compose.yml`:
+
+```
+command: --default-authentication-plugin=mysql_native_password
+```
+
+Because this is a development db, we're not really concerned with security at this point.
+
+Now all of that's out the way, running `./migrate` produces: 
+
+```
+$ ./migrate
+[+] Building 0.0s (0/0)                                                                                                      
+[+] Running 1/0
+ ✔ Container migrations  Created                                                                                        0.0s 
+Attaching to migrations
+migrations  | Flyway Community Edition 10.15.2 by Redgate
+migrations  | 
+migrations  | See release notes here: https://rd.gt/416ObMi
+migrations  | Database: jdbc:mysql://db:3306/ft (MySQL 8.0)
+migrations  | Schema history table `ft`.`flyway_schema_history` does not exist yet
+migrations  | Successfully validated 0 migrations (execution time 00:00.011s)
+migrations  | WARNING: No migrations found. Are your locations set up correctly?
+migrations  | Creating Schema History table `ft`.`flyway_schema_history` ...
+migrations  | Current version of schema `ft`: << Empty Schema >>
+migrations  | Schema `ft` is up to date. No migration necessary.
+migrations  | 
+migrations  | You are not signed in to Flyway, to sign in please run auth
+migrations exited with code 0
+```
+
+After installing it, I wrote my first migration (`V1__test-migration.sql`) and ran it:
+
+```
+$ ./migrate
+[+] Building 0.0s (0/0)                                                                                                      
+[+] Running 1/0
+ ✔ Container migrations  Created                                                                                        0.0s 
+Attaching to migrations
+migrations  | WARNING: Storing migrations in 'sql' is not recommended and default scanning of this location may be deprecated in a future release
+migrations  | Flyway Community Edition 10.15.2 by Redgate
+migrations  | 
+migrations  | See release notes here: https://rd.gt/416ObMi
+migrations  | Database: jdbc:mysql://db:3306/ft (MySQL 8.0)
+migrations  | Successfully validated 1 migration (execution time 00:00.026s)
+migrations  | Current version of schema `ft`: << Empty Schema >>
+migrations  | Migrating schema `ft` to version "1 - test-migration"
+migrations  | Successfully applied 1 migration to schema `ft`, now at version v1 (execution time 00:00.078s)
+migrations  | 
+migrations  | You are not signed in to Flyway, to sign in please run auth
+migrations exited with code 0
+
+```
+
+We can see it was applied successfully, and we double-checked by looking in our DB client:
+
+![alt](../../../../assets/images/fitness-app-article/test-table.png)
+
+
+So now we have a dev database, and a migration system working.
+
+### Building + running the app
+
+Now all of the database stuff is working, we need to build and run the app.
+
+For production, we're going to want to package the app up into a Docker container and have it running behind something like nginx.
+
+For development, we can get away with running the app directly through our IDE, this has the advantage of being able to utilise [Spring Boot DevTools features](https://docs.spring.io/spring-boot/docs/1.5.16.RELEASE/reference/html/using-boot-devtools.html#using-boot-devtools-restart) (e.g. automatic restart on code change) and just being quicker in general.
+
+This will work just fine as we're developing the app. Once we have something that's usable, we'll look at making our app production-ready. I should probably do this at the begininning, rather than trying to retrofit it into an existing application, but I'm really motivated at the moment to start building things.
+
+Running the app through the IDE is really simple, Ctrl+Shift+F10 inside the main `@SpringBootApplication` class and you get greeted with the following:
+
+```
+/home/dan/.sdkman/candidates/java/22.0.1-tem/bin/java ... com.dmoffat.fitnesstracker.FitnesstrackerApplication
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.1)
+
+2024-07-07T10:33:06.328+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] c.d.f.FitnesstrackerApplication          : Starting FitnesstrackerApplication using Java 22.0.1 with PID 20533 (/home/dan/dev/fitness-tracker-app/server/target/classes started by dan in /home/dan/dev/fitness-tracker-app)
+2024-07-07T10:33:06.335+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] c.d.f.FitnesstrackerApplication          : No active profile set, falling back to 1 default profile: "default"
+2024-07-07T10:33:06.409+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2024-07-07T10:33:06.410+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2024-07-07T10:33:08.025+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2024-07-07T10:33:08.034+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2024-07-07T10:33:08.034+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.25]
+2024-07-07T10:33:08.060+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2024-07-07T10:33:08.061+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1650 ms
+2024-07-07T10:33:08.456+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2024-07-07T10:33:08.743+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@72a1f560
+2024-07-07T10:33:08.745+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2024-07-07T10:33:09.326+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] o.s.b.d.a.OptionalLiveReloadServer       : LiveReload server is running on port 35729
+2024-07-07T10:33:09.400+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2024-07-07T10:33:09.408+01:00  INFO 20533 --- [fitnesstracker] [  restartedMain] c.d.f.FitnesstrackerApplication          : Started FitnesstrackerApplication in 3.529 seconds (process running for 4.057)
+```
+
+### Running the tests
+
+Running the tests in a Spring Boot app is no different than running your tests for any Maven project:
+
+```bash
+./mvnw test
+```
+
+This produces:
+
+```
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.017 s -- in com.dmoffat.fitnesstracker.FitnesstrackerApplicationTests
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  6.274 s
+[INFO] Finished at: 2024-07-07T10:37:00+01:00
+[INFO] ------------------------------------------------------------------------
+```
+
+This will be useful when we need to write a script which builds + tests the app.
+
+### Setting up secrets
+
+In previous steps, we've added the secrets in plain-text to the repository which is bad.
+
+At work we use AWS Systems Manager Parameter Store to manage secrets. For this project, I'm going to manage secrets myself using an `.env` file.
+
+First let's create a template file containing all of the variables we'll need:
+
+```bash
+# These are for our app
+DB_HOST=
+DB_USER=
+DB_PASSWORD=
+
+# These are for our 'db' container
+MYSQL_ROOT_USER_PASSWORD=
+MYSQL_USER=
+MYSQL_USER_PASSWORD=
+```
+
+Then let's copy this into `.env` and fill in the variables, then add it to `.gitignore`.
+
+There are three places where we need to remove the plain-text values, and replace with values from our `.env` file:
+- App config (`application.properties`)
+- Flyway config (`flyway.conf`)
+- DB service config (`docker-compose.yml`)
+
+
+### Planning the app's functionality
+
+todo
+
+### Designing the database schema
+
+todo
+
+### Designing the app flow
+
+todo
