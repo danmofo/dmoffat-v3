@@ -11,6 +11,10 @@ const { excludeDrafts, maxPosts } = Astro.props;
 
 const allPosts = await Astro.glob('../pages/writing/*/*/*.md');
 const posts = allPosts.slice(0, Math.min(allPosts.length, maxPosts));
+posts.sort((a, b) => {
+    return b.frontmatter.pubDate.localeCompare(a.frontmatter.pubDate);
+});
+
 ---
 
 <p>Here are my latest posts:</p>
