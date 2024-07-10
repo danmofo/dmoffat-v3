@@ -16,17 +16,18 @@ draft: true
 - [Securing our API](#securing-our-api)
   - [Installing Spring Session](#installing-spring-session)
   - [Configuring Spring Session](#configuring-spring-session)
+  - [Testing out Spring Session](#testing-out-spring-session)
   - [Installing Spring Security](#installing-spring-security)
   - [Configuring Spring Security](#configuring-spring-security)
-- [Building the structure of our backend APIs and writing models](#building-the-structure-of-our-backend-apis-and-writing-models)
-
+  - [Testing out Spring Security](#testing-out-spring-security)
+  - [Writing some integration tests](#writing-some-integration-tests)
+- [Conclusion](#conclusion)
 
 ## What we're going to work on
 
-In this post we're going to look at building the following:
+As mentioned in [part one](/writing/2024/07/building-a-fitness-app-with-java-part-1), we're going to start building our backend API, we'll look at building the following:
 - Integrating jOOQ for data access
 - Securing our API by building an authentication mechanism
-- Building the structure of the backend APIs + writing the models
 
 ## Integrating jOOQ
 
@@ -295,7 +296,7 @@ The basic premise for securing our app will be:
 
 The downside to this approach is that each call to the API will incur a session lookup. I think this is acceptable as the app will have at most 1 user (me!).
 
-At work we use a home-grown authentication/session system, so for this project I'll use this opportunity to use Spring Security + Spring session. We'll need Spring Security to handle authn/authv and Spring Session for session management. By default sessions get stored in memory, but for this project, I'd like to store them in a database.
+At work we use a home-grown authentication/session system, so for this project I'll use this opportunity to use Spring Security + Spring session. We'll need Spring Security to handle authn/authz and Spring Session for session management.
 
 
 ### Installing Spring Session
@@ -303,12 +304,79 @@ At work we use a home-grown authentication/session system, so for this project I
 We add the following to our `pom.xml`
 
 ```xml
-...
+<dependency>
+    <groupId>org.springframework.session</groupId>
+    <artifactId>spring-session-jdbc</artifactId>
+</dependency>
 ```
 
 ### Configuring Spring Session
 
-To configure Spring session I read the documentation (provide a link to the spring session docs)
+By default, sessions (`HttpSession`) are stored in memory. This is fine for this project, but they have a large downside - when the app is restarted, all sessions will be lost, meaning I'll have to authenticate again. We need to persist the sessions in the database, so for this, I have to use `spring-session-jdbc`, which saves sessions in a database by default.
+
+To configure this, I [read the documentation](https://docs.spring.io/spring-session/reference/guides/boot-jdbc.html) and had to do a few things to get it working:
+- **Change the session resolving mechanism**, by default, sessions are set/read using cookies, we want them to be resolved from a HTTP header.
+- **Create the session tables**, by default, Spring Session will manage your database tables, but I'd like to manage them myself using our own database migrations (and change the names)
+- **Set some Spring Session config in application.properties**, I used [this link](https://docs.spring.io/spring-boot/docs/2.4.x/reference/html/appendix-application-properties.html#spring.session.jdbc.initialize-schema) as a reference. I changed the session expiry time, the table names, and the automatic session table creation behaviour.
+
+### Testing out Spring Session
+
+Once done, I created two endpoints:
+- `/`, this endpoint creates a session
+- `/me`, this endpoint reads data from the current session
+
+```java
+static class SessionContents {
+    private final String testing;
+    private final String testing2;
+
+    public SessionContents(Object testing, Object testing2) {
+        this.testing = (String)testing;
+        this.testing2 = (String)testing2;
+    }
+
+    public String getTesting() {
+        return testing;
+    }
+
+    public String getTesting2() {
+        return testing2;
+    }
+}
+
+@GetMapping("/")
+public String home(HttpSession session) {
+    session.setAttribute("testing", "1234");
+    session.setAttribute("testing2", "{\"foo\": \"bar\"}");
+    return "{}";
+}
+
+@GetMapping("/me")
+public SessionContents me(HttpSession session) {
+    return new SessionContents(session.getAttribute("testing"), session.getAttribute("testing2"));
+}
+```
+
+Using cURL, I called the `/` endpoint, which returned (other headers omitted):
+
+```
+$ curl -v http://localhost:8080/
+
+< HTTP/1.1 200 
+< ....
+< X-Auth-Token: 1c7ebf74-af2c-4699-b1dd-2a1e396b0120
+< ...
+```
+
+Then I made a second request to `/me` with the `X-Auth-Token` header:
+
+```
+$ curl -v --header "X-Auth-Token: 1c7ebf74-af2c-4699-b1dd-2a1e396b0120" http://localhost:8080/me
+
+{"testing":"1234","testing2":"{\"foo\": \"bar\"}"}
+```
+
+That's it! Sessions are now working how we want them to.
 
 ### Installing Spring Security
 
@@ -323,14 +391,398 @@ We add the following to our `pom.xml`:
 
 ### Configuring Spring Security
 
-Spring Security has [some pretty extensive documentation](https://docs.spring.io/spring-security/reference/servlet/getting-started.html) which I read to configure it. I found the documentation extensive, but at times quite verbose.
+Spring Security has [some pretty extensive documentation](https://docs.spring.io/spring-security/reference/servlet/getting-started.html) which I read to configure it. It's great that it describes its architecture in detail, but at times I felt like there was too much information, coupled with my inexperience using the library, it was quite frustrating.
 
-... condense all of the stuff that we added to get this working ...
+As with many Spring libraries, searching for information online can also be frustrating, there's so many versions of Spring, and Spring Security that many times you're reading something only to find out it's for an older version, and now there's a newer, easier way to achieve the same thing. I do feel like things have gotten slightly better in this regard, back when I first learned Spring (before Java config was common), weeding through XML configuration for old Spring versions gave me nightmares.
 
-We can test this out by running the following:
+I finally got it working how I wanted to, which I'll describe in detail below - this took a lot of trial and error, reading of documentation and examining logs. I did not arrive at this result immediately! I'm not going to go into detail on how the different parts of Spring Security work together - maybe I'll write another post on that in the future for my own sake.
 
-```bash
-curl -v --header "Content-Type: application/json" --request POST --data '{"email":"danmofo@gmail.com","password":"password"}' http://localhost:8080/
+Firstly I had to create `SecurityConfig.java`, this is where I define Spring Security's config:
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+    
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            // Disable CSRF
+            .csrf(AbstractHttpConfigurer::disable)
+            // Turn off "saved request" logic - this prevents sessions being created when trying to access protected routes without an auth token
+            .requestCache(RequestCacheConfigurer::disable)
+            // Require certain HTTP requests to require auth
+            .authorizeHttpRequests(authorize ->
+                authorize
+                    // Allow anyone to visit /api/v1/auth/login
+                    .requestMatchers("/api/v1/auth/login").permitAll()
+                    // For every other URL, require authentication
+                    .anyRequest().authenticated()
+            )
+            .sessionManagement(session -> {
+                // Only create a HttpSession when required
+                session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);
+            });
+
+        return http.build();
+    }
+
+    // Provide a custom mechanism for looking up User objects
+    @Bean
+    public AuthenticationManager authenticationManager(UserDetailsService userDetailsService) {
+        DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider();
+        authenticationProvider.setUserDetailsService(userDetailsService);
+        return new ProviderManager(authenticationProvider);
+    }
+
+    // Store the 'SecurityContext' in the HttpSession between requests
+    @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+}
 ```
 
-## Building the structure of our backend APIs and writing models
+In this config we use a custom `UserDetailsService`, which is what Spring Security uses to lookup `User`s, ours is defined like this:
+
+```java
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+    private final UserDao userDao;
+
+    @Autowired
+    public CustomUserDetailsService(UserDao userDao) {
+        this.userDao = userDao;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userDao.findByEmail(username);
+        if(user == null) {
+            throw new UsernameNotFoundException("Username not found");
+        }
+        return new org.springframework.security.core.userdetails.User(user.getEmail(), user.getPassword(), Collections.emptyList());
+    }
+}
+```
+
+It's really simple, it uses jOOQ to fetch a `User` from the DB by email (instead of username). We use Spring Security's own implementation of `UserDetails` (`org.springframework.security.core.userdetails.User`).
+
+Next I had to write my `/api/v1/auth/login` endpoint:
+
+```java
+@RestController
+public class AuthController {
+    private final AuthenticationManager authenticationManager;
+    private final SecurityContextRepository securityContextRepository;
+    private final SecurityContextHolderStrategy securityContextHolderStrategy = SecurityContextHolder.getContextHolderStrategy();
+
+    @Autowired
+    public AuthController(
+            AuthenticationManager authenticationManager,
+            SecurityContextRepository securityContextRepository) {
+        this.authenticationManager = authenticationManager;
+        this.securityContextRepository = securityContextRepository;
+    }
+
+    // todo: Return proper request/response types instead of JSON strings
+    @PostMapping("/api/v1/auth/login")
+    public String handleLogin(
+            @RequestBody LoginRequest loginRequest,
+            HttpServletRequest req,
+            HttpServletResponse res) {
+
+        UsernamePasswordAuthenticationToken authentication =
+            UsernamePasswordAuthenticationToken.unauthenticated(loginRequest.email(), loginRequest.password());
+
+        try {
+            // This calls 'CustomUserDetailsService' under the hood and checks the plain-text password against the hashed password contained
+            // on the user record.
+            // If the user doesn't exist (email doesn't match) or the password is incorrect, it will throw an exception.
+            Authentication response = authenticationManager.authenticate(authentication);
+
+            // Here we manually add the authentication to 'SecurityContext' 
+            SecurityContext context = securityContextHolderStrategy.createEmptyContext();
+            context.setAuthentication(response);
+            securityContextHolderStrategy.setContext(context);
+
+            // Finally we persist the `SecurityContext` to the HttpSession
+            securityContextRepository.saveContext(context, req, res);
+            return "{\"success\": true}";
+        } catch (AuthenticationException ex) {
+            // Authentication failed, don't save anything to the HttpSession
+            return "{\"error\": \"Wrong credentials\"}";
+        }
+    }
+
+    public record LoginRequest(String email, String password) {}
+}
+```
+
+This isn't finished, but demonstrates the basic idea. We don't use Spring Security's built-in mechanisms for authenticating users (form login, HTTP basic auth), we do it manually, [as described in their docs](https://docs.spring.io/spring-security/reference/servlet/authentication/session-management.html#store-authentication-manually).
+
+The result of this is that the authenticated user gets saved to the `SPRING_SESSION` table and subsequent requests with that session ID (through the `X-Auth-Token` header) will give us access to the authenticated user's details.
+
+### Testing out Spring Security
+
+Let's make sure everything is working how we expect it to. In our `user` table we have the following user:
+```
+email               | password
+------------------------------
+danmofo@gmail.com   | password
+```
+
+First, let's try and authenticate with invalid credentials (wrong password):
+
+```bash
+$ curl -v --header "Content-Type: application/json" --data '{"email":"danmofo@gmail.com","password":"passwo"}' http://localhost:8080/api/v1/auth/login
+
+{"error": "Wrong credentials"}
+```
+
+We also check the Spring Session table, and see that it hasn't created a row, this means that unsuccessful authorisation attempts do not needlessly create session records.
+
+Now let's try and authenticate with valid credentials:
+
+```bash
+$ curl --header "Content-Type: application/json" --data '{"email":"danmofo@gmail.com","password":"password"}' http://localhost:8080/api/v1/auth/login
+
+# Headers:
+< X-Auth-Token: e3dc1ba6-bd62-4cd6-b077-6f26def4e0a9
+ 
+# Response
+{"success": true}
+```
+
+We can see it's returned a success response, and a header containing our session token. We then check the Spring Session table, and see that it's created a row, with our authenticated user details inside:
+
+```bash
+|PRIMARY_ID                          |SESSION_ID                          |CREATION_TIME    |LAST_ACCESS_TIME |MAX_INACTIVE_INTERVAL|EXPIRY_TIME      |PRINCIPAL_NAME   |
+|------------------------------------|------------------------------------|-----------------|-----------------|---------------------|-----------------|-----------------|
+|101db7e6-335b-4802-aeeb-63000c81b9ff|e3dc1ba6-bd62-4cd6-b077-6f26def4e0a9|1,720,611,678,696|1,720,611,678,696|86,400               |1,720,698,078,696|danmofo@gmail.com|
+```
+
+The last thing we want to test is accessing a protected route with both a valid and an invalid token.
+
+The controller looks like this:
+
+```java
+@RestController
+public class UserDetailController {
+    @GetMapping("/auth")
+    public String protectedRoute(@AuthenticationPrincipal User user) {
+        return "{\"user\": \"" + user.getUsername() + "\"}";
+    }
+}
+```
+
+Let's make a request with a valid token:
+
+```
+$ curl --header "x-auth-token: e3dc1ba6-bd62-4cd6-b077-6f26def4e0a9" http://localhost:8080/auth
+
+{"user": "danmofo@gmail.com"}
+```
+
+And with an invalid token:
+
+```
+$ curl -v --header "x-auth-token: fads" http://localhost:8080/auth
+
+< HTTP/1.1 403
+```
+
+This works! Checking our Spring Session table, and we can see it hasn't created any new rows. In the logs however I could see it's redirecting to some `/error` endpoint, which we don't want it to do (as it then performs a bunch of additional logic), but we can sort that out later on.
+
+### Writing some integration tests
+
+Now we've got a basic example working, and we've tested it manually, we'll write some integration tests to validate it works, should we want to change anything in the future.
+
+I created an integration test like so:
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+class AuthControllerLoginIntegrationTest {
+    @Autowired private MockMvc mockMvc;
+    @Autowired private DSLContext db;
+
+    /**
+     * This tests a few things after authenticating:
+     * - Session token is set in X-Auth-Token header
+     * - Session is saved to the database
+     * - Session in database contains the user that's authenticated
+     */
+    @Test
+    void shouldReturnSessionTokenInHeaderAndCreateSessionAfterAuthentication() throws Exception {
+        MvcResult result = this.mockMvc.perform(loginRequest("danmofo@gmail.com", "password"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Auth-Token"))
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+
+        // Grab the session ID from the response header.
+        String sessionId = result.getResponse().getHeader("X-Auth-Token");
+
+        // Check it got saved in the DB
+        String emailSavedInSession = findPrincipalForSessionId(sessionId);
+        assertEquals("danmofo@gmail.com", emailSavedInSession);
+    }
+
+    private String findPrincipalForSessionId(String sessionId) {
+        String emailSavedInSession = db.selectFrom(SPRING_SESSION)
+            .where(SPRING_SESSION.SESSION_ID.eq(sessionId))
+            .fetchOne(SPRING_SESSION.PRINCIPAL_NAME);
+
+        // Remove the record
+        // todo: Remove this when we've implemented the todo at the top of the class.
+        db.delete(SPRING_SESSION)
+            .where(SPRING_SESSION.SESSION_ID.eq(sessionId))
+            .execute();
+
+        return emailSavedInSession;
+    }
+
+    private MockHttpServletRequestBuilder loginRequest(String email, String password) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        AuthController.LoginRequest request = new AuthController.LoginRequest(email, password);
+
+        return post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(request));
+    }
+}
+```
+
+This works but has a few problems (which we can resolve at a later date):
+1. It requires the database to have some existing state (in this case, a user with the email danmofo[at]gmail.com)
+2. We have to manually remove the created sessions from the session table afterwards to stop it cluttering up our dev database
+
+I thought I could deal with these problems as usual by wrapping the test method in `@Transactional`, causing all SQL operations to be rolled back at the end of the test, but had issues with jOOQ "seeing" the session records (when I queried the session table, there were none there, despite the session being created). Spring Session manages sessions in its own transaction (`REQUIRES_NEW`), so maybe that's got something to do with it.
+
+I didn't spend any more time investigating this (maybe something for the future), and carried on writing more tests.
+
+This makes sure that an email and password are provided:
+
+```java
+@Test
+void shouldReturnErrorWhenCredentialsMissing() throws Exception {
+    this.mockMvc.perform(loginRequest(null, null))
+        .andExpect(status().is4xxClientError())
+        .andExpect(jsonPath("$.errorCode").value(ErrorCode.VALIDATION.toString()))
+        .andExpect(jsonPath("$.validationErrors.length()").value(2))
+        .andExpect(jsonPath("$.validationErrors[*].field", containsInAnyOrder("email", "password")))
+        .andDo(print());
+}
+```
+
+Our controller method signature needed to be updated to this to validate the request:
+
+```java
+    @PostMapping("/api/v1/auth/login")
+    public String handleLogin(
+            @Valid @RequestBody LoginRequest loginRequest,
+            HttpServletRequest req,
+            HttpServletResponse res) {}
+```
+
+...and we had to add some annotations to our `LoginRequest` model:
+
+```java
+public record LoginRequest(
+        @NotEmpty String email,
+        @NotEmpty String password) {}
+```
+
+Now when validation fails, Spring will throw a `MethodArgumentNotValidException`, we can handle this in a global fashion by creating a `ErrorHandler` class like so:
+
+```java
+@ControllerAdvice
+public class ErrorHandler {
+
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseBody
+    public ValidationErrorResponse handleValidationExceptions(MethodArgumentNotValidException ex) {
+        List<ValidationError> validationErrors = ex.getBindingResult().getAllErrors().stream()
+            .map(error ->
+                new ValidationError(((FieldError) error).getField(), error.getDefaultMessage())
+            )
+            .toList();
+
+        return new ValidationErrorResponse(validationErrors);
+    }
+}
+```
+
+This maps `BindingResult`s field/error messages to a `ValidationErrorResponse` and returns it as JSON to the client:
+
+```json
+{
+    "errorCode": "VALIDATION",
+    "validationErrors": [
+        {
+            "field": "email",
+            "message": "must not be empty"
+        },
+        {
+            "field": "password",
+            "message": "must not be empty"
+        }
+    ]
+}
+```
+
+Let's write a test to make sure that an error is returned when the email does not match:
+
+```java
+@Test
+void shouldReturnErrorWhenEmailDoesNotMatchAnyUserRecords() throws Exception {
+    this.mockMvc.perform(loginRequest("i-do-not-exist@gmail.com", "password"))
+        .andExpect(status().is4xxClientError())
+        .andExpect(jsonPath("$.error").value("Wrong credentials"))
+        .andDo(print());
+}
+```
+
+This fails because currently, our controller is returning a `String` when authentication fails. This means regardless of the outcome, we respond with a HTTP 200 status code.
+
+To change that, we can modify our controller signature again:
+
+```java
+    @PostMapping("/api/v1/auth/login")
+    public ResponseEntity<ApiResponse> handleLogin(
+            @Valid @RequestBody LoginRequest loginRequest,
+            HttpServletRequest req,
+            HttpServletResponse res) {}
+```
+
+We now return a `ResponseEntity<ApiResponse>`. A `ResponseEntity` can have a status code and a body, and it gets serialised as JSON by Spring. We cannot just annotate our method with a `@ResponseStatus` as it needs return a different status code in different circumstances.
+
+Because we need to return two different types in our method, `LoginSuccessResponse` when authentication is successful and `ErrorResponse` when it fails, we use a common parent interface `ApiResponse` as the return type of our controller - `ResponseEntity<ApiResponse>`. We can now return anything that implements that interface, and our code will still compile.
+
+Now we've done that, let's write our final test:
+
+```java
+@Test
+void shouldReturnErrorWhenPasswordDoesNotMatchUsersPassword() throws Exception {
+    this.mockMvc.perform(loginRequest("danmofo@gmail.com", "wrong-password"))
+        .andExpect(status().is4xxClientError())
+        .andExpect(jsonPath("$.errorCode").value(ErrorCode.INVALID_CREDENTIALS.toString()))
+        .andDo(print());
+}
+```
+
+This is pretty much identical to the previous test.
+
+> **Side note**, you may notice by looking at my tests that I'm testing things indirectly (the authentication service for example). This is intentional - we want to make sure all of the different parts work together.
+
+
+## Conclusion
+
+Setting up jOOQ, Spring Session and Spring Security took much longer than I was anticipating, however if I have to use them again in the future, I'll have a much clearer idea of what I'm doing.
+
+In the next part we'll start building the individual API endpoints needed by our app.
+
+[Bye for now](https://www.youtube.com/watch?v=JgFvNzLAWtY)
