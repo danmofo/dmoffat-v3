@@ -405,22 +405,193 @@ In the initial prototyping stage tests like this have less value as functionalit
 Now let's write some integration tests for our various DAOs, here's one for `WorkoutDao`:
 
 ```java
-// workout dao
+@Test
+@Transactional
+void shouldCreateNewWorkout() {
+    var workout = workoutDao.create(1);
+
+    // Make sure the record got mapped to our model
+    assertEquals(1, workout.getUser().getId());
+    assertNotNull(workout.getId());
+
+    // Make sure the workout got added to the database.
+    var record = db.selectFrom(WORKOUT)
+        .where(WORKOUT.ID.eq(UInteger.valueOf(workout.getId())))
+        .fetchOne();
+
+    assertNotNull(record);
+    assertNotNull(record.getCreatedOn());
+    assertNotNull(record.getStartedOn());
+    assertEquals(1, record.getUserId().intValue());
+}
+
+@Test
+@Transactional
+void shouldFindOneWithUser() {
+    // Add a record for a user
+    var newWorkout = workoutDao.create(1);
+
+    // Now fetch it
+    var workout = workoutDao.findOneWithUser(newWorkout.getId());
+    var user = workout.getUser();
+
+    // Make sure our model was mapped
+    assertEquals(1, user.getId());
+    assertEquals("danmofo@gmail.com", user.getEmail());
+    assertEquals(newWorkout.getId(), workout.getId());
+}
 ```
+
+Pretty simple stuff. You might noticed that we're relying on some existing state in the DB. We're planning to solve this later on with the use of [TestContainers](https://testcontainers.com/). The other not so great thing is that we are using a DAO method to populate the database in our second test, which means it may fail if `#create` stops working, giving us a false positive - I was just being lazy here.
 
 Here's one for `ExerciseDao`:
 
 ```java
-// exercise dao
+@Test
+void shouldFindOneById() {
+    var exercise = exerciseDao.findOne(1);
+
+    assertNotNull(exercise);
+    assertEquals(1, exercise.getId());
+    assertEquals("Back squat", exercise.getName());
+    assertNull(exercise.getBrand());
+    assertEquals("FREE_WEIGHT", exercise.getType().toString());
+}
 ```
+
+Again, pretty simple stuff, but relies on some existing DB state.
 
 Finally, here's one for `WorkoutExerciseDao`:
 
 ```java
-// workoutExerciseDao - 2 methods
+@Test
+@Transactional
+void shouldUpdateSets() {
+    // Prepare
+    var workout = db.newRecord(WORKOUT);
+    workout.setUserId(UInteger.valueOf(1));
+    workout.setStartedOn(LocalDateTime.now());
+    workout.setCreatedOn(LocalDateTime.now());
+    workout.store();
+
+    var workoutExercise = db.newRecord(WORKOUT_EXERCISE);
+    workoutExercise.setExerciseId(UInteger.valueOf(1));
+    workoutExercise.setWorkoutId(workout.getId());
+    workoutExercise.setWeight(UInteger.valueOf(100));
+    workoutExercise.setReps(5);
+    workoutExercise.setSets(1);
+    workoutExercise.setCreatedOn(LocalDateTime.now());
+    workoutExercise.store();
+
+    // Execute
+    workoutExerciseDao.updateSets(workoutExercise.getId().intValue(), 2);
+
+    // Test
+    var savedRecord = findWorkoutExerciseRecord(workoutExercise.getId());
+    assertEquals(2, savedRecord.getSets());
+}
+
+@Test
+@Transactional
+void shouldCreateNewWorkoutExercise() {
+    // Prepare
+    var workout = workoutDao.create(1);
+    workout.setUser(new User(1));
+    var workoutExercise = new WorkoutExercise();
+    workoutExercise.setWorkout(workout);
+    workoutExercise.setExercise(new Exercise(1));
+    workoutExercise.setEquipment(List.of("BELT", "SOMETHING_ELSE"));
+    workoutExercise.setWeight(100);
+    workoutExercise.setReps(5);
+    workoutExercise.setSets(1);
+    workoutExercise.setNotes("This is a note");
+
+    // Execute
+    Integer id = workoutExerciseDao.create(workoutExercise);
+
+    // Test
+    var savedRecord = findWorkoutExerciseRecord(UInteger.valueOf(id));
+    assertEquals("[\"BELT\", \"SOMETHING_ELSE\"]", savedRecord.getEquipment().data());
+    assertEquals(workout.getId(), savedRecord.getWorkoutId().intValue());
+    assertEquals(1, savedRecord.getExerciseId().intValue());
+    assertEquals(100, savedRecord.getWeight().intValue());
+    assertEquals(5, savedRecord.getReps());
+    assertEquals(1, savedRecord.getSets());
+    assertEquals("This is a note", savedRecord.getNotes());
+    assertNotNull(savedRecord.getCreatedOn());
+}
+```
+You can see from this how much code is being written to get the database into a state we require, it would be much easier to write some SQL to do that before our test runs.
+
+The final two tests caused me some issues:
+
+```java
+@Test
+@Transactional
+void findByWorkoutExerciseIdByWeightRepsAndEquipmentWithEquipment() {
+    // Prepare
+    var workoutExercise = createWorkoutExerciseWithEquipment(List.of("BELT", "SOMETHING_ELSE"));
+
+    // Execute
+    var result = workoutExerciseDao.findByWorkoutExerciseByWeightRepsAndEquipment(workoutExercise);
+    assertNotNull(result);
+}
+
+@Test
+@Transactional
+void findByWorkoutExerciseIdByWeightRepsAndEquipmentWithoutEquipment() {
+    // Prepare
+    var workoutExercise = createWorkoutExerciseWithEquipment(null);
+
+    // Execute
+    var result = workoutExerciseDao.findByWorkoutExerciseByWeightRepsAndEquipment(workoutExercise);
+    assertNotNull(result);
+}
 ```
 
-Now that we've tested the service and the DAO, we'll need to write a final integration test to make sure that our controller returns the correct responses.
+This method (`findByWorkoutByWeightRepsAndEquipment`) is used to find duplicate workout exercises so they can be merged together.
+
+I had a lot of trouble writing a query that could fetch a row by its equipment. My inital attempt was something like:
+
+```java
+db.selectFrom(WORKOUT_EXERCISE)
+    .where(WORKOUT_EXERCISE.EQUIPMENT.eq(toJson(equipmentToFind)))
+```
+
+To my surprise this didn't work. When I printed out the value of the JSON in the DB, and the JSON produced by `toJson()`, I noticed there was a space after the comma:
+
+```js
+// In the DB
+["BELT", "KNEE_SLEEVES"]
+
+// My string I was searching for
+["BELT","KNEE_SLEEVES"]
+```
+
+Initially I thought that I must've been inserted it incorrectly but nope, as it turns out, MySQL adds that space after the comma...
+
+I could not find a way in the jOOQ docs to deal with this problem, so I had to resort to raw SQL:
+
+```java
+db.selectFrom(WORKOUT_EXERCISE)
+    .where("equipment = JSON_ARRAY(" + toQuotedStringList(workoutExercise.getEquipment()) + ")")
+```
+
+Which produces the following SQL:
+
+```sql
+WHERE equipment = JSON_ARRAY('BELT', 'KNEE_SLEEVES')
+```
+
+What a nightmare! In general I've found working with JSON columns in jOOQ a bit tricky - maybe I should've stored them in another table - I did it this way for simplicity.
+
+Now that we've tested the service and the DAOs, we'll need to write a final integration test to make sure that our controller returns the correct responses:
+
+```java
+// todo
+```
+
+Everything is now tested properly - I think we spent longer writing the tests to make sure it works than actually writing the code we tested. In the future I'll skip adding test code to these posts unless there's something particularly interesting about them.
 
 ## Refactoring: Spring Security User
 
