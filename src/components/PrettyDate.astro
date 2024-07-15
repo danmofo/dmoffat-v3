@@ -2,10 +2,12 @@
 type Props = {
     date: string
 }
+
+const isoDateString = new Date(Astro.props.date).toISOString()
+const formattedDate = new Date(Astro.props.date).toLocaleDateString('en-GB', {
+    dateStyle: 'long'
+})
+
 ---
 
-<time 
-    datetime={new Date(Astro.props.date).toISOString()} 
-    class="date">
-    {new Date(Astro.props.date).toLocaleDateString('en-GB')}
-</time>
+<time datetime={isoDateString} class="date">{formattedDate}</time>

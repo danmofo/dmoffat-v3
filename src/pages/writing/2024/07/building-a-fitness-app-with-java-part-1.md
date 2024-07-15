@@ -1,8 +1,13 @@
 ---
 layout: '@layouts/BlogLayout.astro'
-title: 'Part one - Building a fitness tracking app with Java'
+title: 'Building a fitness tracking app with Java - Part one'
 pubDate: 2024-07-07
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
+series_posts:
+  - name: Part two
+    path: writing/2024/07/building-a-fitness-app-with-java-part-2
+  - name: Part three 
+    path: writing/2024/07/building-a-fitness-app-with-java-part-3
 ---
 
 - [The problem](#the-problem)
@@ -39,11 +44,11 @@ For this project I have a few aims:
 - Gain more experience building React Native applications
 - Build something that's actually useful for me and my day-to-day life
 
-I'm fully aware that app exist that do these things (probably), but the goals are more focused on learning new things and having an interesting side project to work on, rather than building an app to make money, or solve problems for a large group of people. Similarly for different aspects of the app, I'm going to build almost everything from scratch (e.g. auth) rather than something off the shelf - I may change this approach if I start spending too long on those things.
+I'm fully aware that apps exist that do these things, but the goals are more focused on learning new things and having an interesting side project to work on, rather than building an app to make money, or solve problems for a large group of people.
 
 ## Building it
 
-For part one, I'm going to focus on setting up the project and designing things, rather than going straight in and writing lots of code.
+For part one, I'm going to focus on setting up the project and designing things, rather than going straight to writing code.
 
 I have a general idea of how I'm going to approach this:
 - Setting up the project, this includes things like the database migration process, running the tests and building/running the app locally.
@@ -53,7 +58,7 @@ I have a general idea of how I'm going to approach this:
 
 ### Setting up the project
 
-Firstly we'll need the the Java 22 SDK for writing code, I got this by using `sdkman` and running this:
+Firstly we'll need the the Java 22 SDK for writing code, I got this by using `sdkman`:
 
 ```bash
 sdk install java 22.0.1-tem
@@ -70,18 +75,18 @@ OpenJDK 64-Bit Server VM Temurin-22.0.1+8 (build 22.0.1+8, mixed mode, sharing)
 Next we'll create our Spring project, using [Spring Initializr](https://start.spring.io), we'll add the following additional deps:
 - Spring Web
 - Spring Boot DevTools
-- JOOQ (something I'd like to try for DB access)
+- JOOQ
 - MySQL DB Driver
 
 I might be missing some, but we can always add them later on. You can use [this link](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.3.1&packaging=jar&jvmVersion=22&groupId=com.dmoffat&artifactId=fitnesstracker&name=fitnesstracker&description=Fitness%20tracking%20application&packageName=com.dmoffat.fitnesstracker&dependencies=web,jooq,devtools,mysql) to see the exact configuration I chose.
 
-I unzipped the downloaded ZIP file and filled in my `.gitignore`.
+I unzipped the downloaded file and filled in my `.gitignore`.
 
 Now we have a fully functional Spring app (that doesn't even start, for the moment).
 
 ### Setting up the database
 
-Before we can run our app, we need to set up a database. As mentioned in my previous blog posts, I use Docker to manage running different services on my local machine. Let's use Docker to create a MySQL instance. Because I'm planning on running multiple services on my computer (MySQL, Java app and a web server (reverse proxy)), I'll use Docker Compose to manage my Docker containers.
+Before we can run our app, we need to set up a database. I use Docker to manage running different services on my local machine. Let's use Docker to create a MySQL instance. Because I'm planning on running multiple services on my computer (MySQL, Java app and a web server (reverse proxy)), I'll use Docker Compose to manage my Docker containers.
 
 To use Docker Compose we'll need to create a `docker-compose.yml` config file. I used [the official reference](https://docs.docker.com/compose/compose-file/) to figure out how to write the config file (we use it at work for local dev, so I do have a general idea on the different elements).
 
@@ -105,7 +110,7 @@ services:
       MYSQL_ROOT_PASSWORD: example
 ```
 
-I read through the [offical MySQL docker image docs](https://hub.docker.com/_/mysql) to configure it. I decided to use `8.0.38` as that version is supported by the DB access library I want to use (JOOQ).
+I read through the [offical MySQL docker image docs](https://hub.docker.com/_/mysql) to configure it. I decided to use `8.0.38` as that version is supported by jOOQ.
 
 Next I started the app services (in this case, just the DB) to make sure it works:
 
@@ -159,7 +164,6 @@ spring.datasource.url=jdbc:mysql://<db_host>
 spring.datasource.username=<db_user>
 spring.datasource.password=<db_password>
 spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
-spring.jpa.show-sql=true
 ```
 
 I then started my app (through the IDE) and made sure it connected to the database.
@@ -317,8 +321,7 @@ migrations exited with code 0
 
 We can see it was applied successfully, and we double-checked by looking in our DB client:
 
-![alt](../../../../assets/images/fitness-app-article/test-table.png)
-
+![Database migration results](../../../../assets/images/fitness-app-article/test-table.png)
 
 So now we have a dev database, and a migration system working.
 

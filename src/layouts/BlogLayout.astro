@@ -4,13 +4,24 @@ import PrettyDate from '@components/PrettyDate.astro';
 import BaseLayout from '@layouts/BaseLayout.astro';
 
 const { frontmatter } = Astro.props;
+
+const isPostPartOfSeries = frontmatter.series_posts && frontmatter.series_posts.length > 0;
 ---
 
 <BaseLayout title={frontmatter.title + " | Daniel Moffat"} description={frontmatter.description}>
     <div class="post">
         <header class="post__header">
             <h1 class="post__title">{frontmatter.title} <If condition={!!frontmatter.draft}>(draft)</If></h1>
-            <p class="post__metadata">Written by <b>Daniel Moffat</b> on <b><PrettyDate date={frontmatter.pubDate} /></b></p>
+            <If condition={isPostPartOfSeries}>
+                <div class="post__series-header">
+                    {
+                        frontmatter.series_posts?.map((post: {path: string, name: string}) => {
+                            return (<a href={'/' + post.path}>{post.name}</a>)
+                        })
+                    }
+                </div>
+            </If>
+            <p class="post__metadata">Posted by <i>Daniel Moffat</i> on <b><PrettyDate date={frontmatter.pubDate} /></b>.</p>
         </header>
         <If condition={!!frontmatter.draft}>
             <div class="draft-warning">

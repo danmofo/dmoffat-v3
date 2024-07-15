@@ -1,9 +1,13 @@
 ---
 layout: '@layouts/BlogLayout.astro'
-title: 'Part two - Building a fitness tracking app with Java'
+title: 'Building a fitness tracking app with Java - Part two'
 pubDate: 2024-07-09
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
-draft: true
+series_posts: 
+  - name: Part one
+    path: writing/2024/07/building-a-fitness-app-with-java-part-1
+  - name: Part three 
+    path: writing/2024/07/building-a-fitness-app-with-java-part-3
 ---
 
 - [What we're going to work on](#what-were-going-to-work-on)
@@ -33,14 +37,14 @@ As mentioned in [part one](/writing/2024/07/building-a-fitness-app-with-java-par
 
 ### What is jOOQ?
 
-If you're unfamilar with jOOQ, it's a library that generates Java classes from your database structure, letting you write type safe queries.
+If you're unfamilar with [jOOQ](https://www.jooq.org/), it's a library that generates Java classes from your database structure, letting you write type safe queries.
 
 ### Why not use Hibernate?
 
 In my day-to-day work, and in other projects, I've used either Hibernate, or plain JDBC. 
 
 For Hibernate specifically, I really dislike the following:
-- Doing anything more than a simple join seems overly complicated, for example when you start fetching associations which have their own associations.
+- Doing anything more than a simple join seems overly complicated, for example fetching associations which have their own associations.
 - Half the time you are trying to conjure the right combination of annotations to get Hibernate to produce the SQL you want, you end up just writing HQL anyway.
 - Once you learn these things, you can't apply the knowledge anywhere else - which I guess is true for lots of things, but I really do feel cheated when I spend an hour making Hibernate behave the way I want to.
 
@@ -56,6 +60,8 @@ We've already got the `jooq` dependency in our `pom.xml`:
     <artifactId>spring-boot-starter-jooq</artifactId>
 </dependency>
 ```
+
+This deals with setting up jOOQ for us automatically, and giving us access to a `DSLContext`, an object we can use for performing DB operations.
 
 Next we need to set up the Maven code generator, which comes in the form of a Maven plugin:
 
@@ -227,7 +233,7 @@ class ExerciseServiceTest {
 }
 ```
 
-We can see the following logs which proves it works:
+Which produces:
 
 ```
 Executing query          : select `ft`.`exercise`.`id`, `ft`.`exercise`.`name`, `ft`.`exercise`.`brand`, `ft`.`exercise`.`type` from `ft`.`exercise`
@@ -242,7 +248,7 @@ Fetched result           : +----+-------------------+------+-----------+
 Fetched row(s)           : 3
 ```
 
-Because this is just an example, I've used jOOQ classes directly in my service - in the actual app I'll create my own POJOs and not let jOOQs types leak into the rest of my code.
+Everything seems to be working nicely.
 
 ### Creating DAOs
 
@@ -252,8 +258,6 @@ Most Spring apps I've worked are split into 3 layers:
 - **Repository/DAO**, this is where you access the database
 
 I'm not really sure if this pattern has a name, but it seems pretty prevalent in Spring apps. The idea is that each layer only knows about the layer below it, for example, the service talks to the repository to fetch things from the database, but doesn't know that it's been called from a REST API endpoint. Similarly the repository just cares about talking to the database, it has no knowledge or reference to the service that calls it.
-
-> **Side note**: I've heard people mention a benefit of being to swap databases (e.g. MySQL -> Oracle) without having to change any code, but in practice, I've never seen a product migrate from one database to another.
 
 Usually in a Hibernate project, you end up creating some `HibernateDao<KeyType, EntityType>` class, I'll do the same for jOOQ, merely to wrap the jOOQ types and use my own models throughout the rest of the codebase.
 
@@ -282,7 +286,7 @@ public class ExerciseDao {
 }
 ```
 
-Maybe when I need to, I'll create a generic jOOQ DAO you can extend (or use their provided `DAOImpl`), for now, this will suffice.
+You may notice it doesn't contain any methods to update an exercise, or create a new exercise - this is intentional. Because my app doesn't have this functionality (exercises will be managed through database migrations, and won't be editable by users), we don't need methods to do this.
 
 ## Securing our API
 
@@ -376,7 +380,7 @@ $ curl -v --header "X-Auth-Token: 1c7ebf74-af2c-4699-b1dd-2a1e396b0120" http://l
 {"testing":"1234","testing2":"{\"foo\": \"bar\"}"}
 ```
 
-That's it! Sessions are now working how we want them to.
+Now we have sessions working and are able to add arbitary data to a `HttpSession`, we can configure Spring Security.
 
 ### Installing Spring Security
 
@@ -393,9 +397,9 @@ We add the following to our `pom.xml`:
 
 Spring Security has [some pretty extensive documentation](https://docs.spring.io/spring-security/reference/servlet/getting-started.html) which I read to configure it. It's great that it describes its architecture in detail, but at times I felt like there was too much information, coupled with my inexperience using the library, it was quite frustrating.
 
-As with many Spring libraries, searching for information online can also be frustrating, there's so many versions of Spring, and Spring Security that many times you're reading something only to find out it's for an older version, and now there's a newer, easier way to achieve the same thing. I do feel like things have gotten slightly better in this regard, back when I first learned Spring (before Java config was common), weeding through XML configuration for old Spring versions gave me nightmares.
+As with many Spring libraries, searching for information online can be frustrating, there are so many versions of Spring, and Spring Security that many times you're reading something only to find out it's for an older version, and now there's a newer, easier way to achieve the same thing.
 
-I finally got it working how I wanted to, which I'll describe in detail below - this took a lot of trial and error, reading of documentation and examining logs. I did not arrive at this result immediately! I'm not going to go into detail on how the different parts of Spring Security work together - maybe I'll write another post on that in the future for my own sake.
+I finally got it working how I wanted to, which I'll describe in detail below - this took a lot of trial and error, reading of documentation and examining logs. I did not arrive at this result immediately. I'm not going to go into detail on how the different parts of Spring Security work together - maybe I'll write another post on that in the future for my own sake.
 
 Firstly I had to create `SecurityConfig.java`, this is where I define Spring Security's config:
 
@@ -530,7 +534,7 @@ Let's make sure everything is working how we expect it to. In our `user` table w
 ```
 email               | password
 ------------------------------
-danmofo@gmail.com   | password
+danmofo@gmail.com   | <hashed_password>
 ```
 
 First, let's try and authenticate with invalid credentials (wrong password):
@@ -593,7 +597,7 @@ $ curl -v --header "x-auth-token: fads" http://localhost:8080/auth
 < HTTP/1.1 403
 ```
 
-This works! Checking our Spring Session table, and we can see it hasn't created any new rows. In the logs however I could see it's redirecting to some `/error` endpoint, which we don't want it to do (as it then performs a bunch of additional logic), but we can sort that out later on.
+This works! Checking our Spring Session table, and we can see it hasn't created any new rows. In the `DEBUG` logs I could see it's redirecting to some `/error` endpoint, which we don't want it to do (as it then performs a bunch of additional logic), but we can sort that out later on.
 
 ### Writing some integration tests
 
@@ -636,7 +640,6 @@ class AuthControllerLoginIntegrationTest {
             .fetchOne(SPRING_SESSION.PRINCIPAL_NAME);
 
         // Remove the record
-        // todo: Remove this when we've implemented the todo at the top of the class.
         db.delete(SPRING_SESSION)
             .where(SPRING_SESSION.SESSION_ID.eq(sessionId))
             .execute();
@@ -680,11 +683,11 @@ void shouldReturnErrorWhenCredentialsMissing() throws Exception {
 Our controller method signature needed to be updated to this to validate the request:
 
 ```java
-    @PostMapping("/api/v1/auth/login")
-    public String handleLogin(
-            @Valid @RequestBody LoginRequest loginRequest,
-            HttpServletRequest req,
-            HttpServletResponse res) {}
+@PostMapping("/api/v1/auth/login")
+public String handleLogin(
+        @Valid @RequestBody LoginRequest loginRequest,
+        HttpServletRequest req,
+        HttpServletResponse res) {}
 ```
 
 ...and we had to add some annotations to our `LoginRequest` model:
@@ -746,7 +749,7 @@ void shouldReturnErrorWhenEmailDoesNotMatchAnyUserRecords() throws Exception {
 }
 ```
 
-This fails because currently, our controller is returning a `String` when authentication fails. This means regardless of the outcome, we respond with a HTTP 200 status code.
+This fails because currently, our controller is returning a 200 status code, regardless of the authenticatino outcome.
 
 To change that, we can modify our controller signature again:
 
@@ -778,10 +781,9 @@ This is pretty much identical to the previous test.
 
 > **Side note**, you may notice by looking at my tests that I'm testing things indirectly (the authentication service for example). This is intentional - we want to make sure all of the different parts work together.
 
-
 ## Conclusion
 
-Setting up jOOQ, Spring Session and Spring Security took much longer than I was anticipating, however if I have to use them again in the future, I'll have a much clearer idea of what I'm doing.
+Setting up jOOQ, Spring Session and Spring Security took much longer than I was anticipating, but now I feel much more comfortable setting them up.
 
 In the next part we'll start building the individual API endpoints needed by our app.
 
