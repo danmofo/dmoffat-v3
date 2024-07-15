@@ -1,9 +1,13 @@
 ---
 layout: '@layouts/BlogLayout.astro'
-title: 'Part three - Building a fitness tracking app with Java'
+title: 'Building a fitness tracking app with Java - Part three'
 pubDate: 2024-07-10
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
-draft: true
+series_posts:
+  - name: Part one
+    path: writing/2024/07/building-a-fitness-app-with-java-part-1
+  - name: Part two
+    path: writing/2024/07/building-a-fitness-app-with-java-part-2
 ---
 
 - [What we're going to work on](#what-were-going-to-work-on)
@@ -12,6 +16,8 @@ draft: true
   - [Log exercise for workout](#log-exercise-for-workout)
 - [Refactoring: Spring Security User](#refactoring-spring-security-user)
 - [Building more endpoints](#building-more-endpoints)
+  - [Start workout](#start-workout-1)
+  - [Log weight](#log-weight)
 - [Conclusion](#conclusion)
 
 ## What we're going to work on
@@ -157,7 +163,7 @@ We'll need to know the `workout_id` to add the exercise to, the `exercise_id` th
 {
     "workoutId": 1234,
     "exerciseId": 1234,
-    "weight": 100,
+    "weight": 100.25,
     "sets": 1,
     "reps": 5,
     "notes": "This was really difficult."
@@ -178,13 +184,13 @@ public ResponseEntity<ApiResponse> handleLogExercise(
 }
 ```
 
-This currently doesn't do anything useful (the service method is empty and it doesn't return anything), let's write the implementation.
+This currently doesn't do anything useful (the service method is empty and it doesn't return anything), so let's write the implementation.
 
 Our service needs to do a few things:
 
 1. Make sure the given user owns the workout they're trying to log an exercise for
 2. Add a record to `ft.workout_exercise`
-3. If the exercise is the same weight, reps and equipment as an existing record, merge the two records together. Let me try and explain:
+3. If the exercise is the same weight, reps and equipment as an existing record, merge the two records together. Let me try and explain why I want it to work like this:
    1. User logs a squat for 1 set and 5 reps of 100KG
    2. User logs another squat for 1 set and 5 reps of 100KG
    3. These records will be combined into a single record of 2 sets of 5 reps of 100KG.
@@ -324,42 +330,42 @@ void shouldNotLogExerciseForIfUserDoesntOwnWorkout() {
 Our next test makes sure an exercise gets logged:
 
 ```java
-    @Test
-    void shouldLogNewExerciseIfNotADuplicateWithSameIdWeightRepsAndEquipment() {
-        // Create a workout belonging to user
-        var user = new User(1);
-        var workout = new Workout(1);
-        workout.setUser(user);
-        when(workoutDao.findOneWithUser(1)).thenReturn(workout);
+@Test
+void shouldLogNewExerciseIfNotADuplicateWithSameIdWeightRepsAndEquipment() {
+    // Create a workout belonging to user
+    var user = new User(1);
+    var workout = new Workout(1);
+    workout.setUser(user);
+    when(workoutDao.findOneWithUser(1)).thenReturn(workout);
 
-        // Create an exercise
-        var exercise = new Exercise(1);
-        when(exerciseDao.findOne(1)).thenReturn(exercise);
+    // Create an exercise
+    var exercise = new Exercise(1);
+    when(exerciseDao.findOne(1)).thenReturn(exercise);
 
-        // Mock #create to return a fixed value
-        when(workoutExerciseDao.create(any(WorkoutExercise.class))).thenReturn(1);
+    // Mock #create to return a fixed value
+    when(workoutExerciseDao.create(any(WorkoutExercise.class))).thenReturn(1);
 
-        var request = new LogExerciseRequest(
-            1, // Workout ID
-            1, // Exercise ID
-            100, // Weights
-            1, // Sets
-            3, // Reps
-            "My notes",
-            List.of("BELT")
-        );
+    var request = new LogExerciseRequest(
+        1, // Workout ID
+        1, // Exercise ID
+        100, // Weights
+        1, // Sets
+        3, // Reps
+        "My notes",
+        List.of("BELT")
+    );
 
-        WorkoutExercise result = logExerciseService.logExercise(user, request);
-        assertEquals(1, result.getId());
-        assertEquals(1, result.getWorkout().getId());
-        assertEquals(1, result.getExercise().getId());
-        assertEquals(100, result.getWeight());
-        assertEquals(1, result.getSets());
-        assertEquals(3, result.getReps());
-        assertEquals("My notes", result.getNotes());
-        assertEquals(List.of("BELT"), result.getEquipment());
-        assertNotNull(result.getCreatedOn());
-    }
+    WorkoutExercise result = logExerciseService.logExercise(user, request);
+    assertEquals(1, result.getId());
+    assertEquals(1, result.getWorkout().getId());
+    assertEquals(1, result.getExercise().getId());
+    assertEquals(100, result.getWeight());
+    assertEquals(1, result.getSets());
+    assertEquals(3, result.getReps());
+    assertEquals("My notes", result.getNotes());
+    assertEquals(List.of("BELT"), result.getEquipment());
+    assertNotNull(result.getCreatedOn());
+}
 ```
 
 And our final test makes sure that if the exercise is a duplicate of another (that is, an exercise with the same workout, weight, reps and equipment), it increments the `sets` value:
@@ -568,7 +574,7 @@ To my surprise this didn't work. When I printed out the value of the JSON in the
 ["BELT","KNEE_SLEEVES"]
 ```
 
-Initially I thought that I must've been inserted it incorrectly but nope, as it turns out, MySQL adds that space after the comma...
+Initially I thought that I must've been inserted it incorrectly but nope, it turns out MySQL adds that space after the comma...
 
 I could not find a way in the jOOQ docs to deal with this problem, so I had to resort to raw SQL:
 
@@ -588,14 +594,101 @@ What a nightmare! In general I've found working with JSON columns in jOOQ a bit 
 Now that we've tested the service and the DAOs, we'll need to write a final integration test to make sure that our controller returns the correct responses:
 
 ```java
-// todo
+@Test
+@Transactional
+void shouldReturnErrorResponseWhenExerciseNotLogged() throws Exception {
+    when(logExerciseService.logExercise(any(), any())).thenReturn(null);
+
+    var request = new LogExerciseRequest(
+        1,
+        1,
+        100,
+        1,
+        1,
+        null,
+        null
+    );
+
+    mockMvc.perform(logExerciseRequest(request))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success", Matchers.is(false)));
+}
+
+@Test
+@Transactional
+void shouldReturnSuccessResponseWhenExerciseLogged() throws Exception {
+    var request = new LogExerciseRequest(
+        1,
+        1,
+        100,
+        1,
+        1,
+        null,
+        null
+    );
+
+    mockMvc.perform(logExerciseRequest(request))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success", Matchers.is(true)))
+        .andExpect(jsonPath("$.workoutExerciseId").isNotEmpty());
+}
 ```
 
-Everything is now tested properly - I think we spent longer writing the tests to make sure it works than actually writing the code we tested. In the future I'll skip adding test code to these posts unless there's something particularly interesting about them.
+This makes sure that well-formed requests return the correct response when the service returns the success/error values. Let's write some more to make sure the request is well-formed:
+
+```java
+// This tests @NotNull annotation
+@Test
+@Transactional
+void shouldReturnErrorResponseWhenFieldsAreMissingFromRequest() throws Exception {
+    var request = new LogExerciseRequest(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+    );
+
+    mockMvc.perform(logExerciseRequest(request))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errorCode").value(ErrorCode.VALIDATION.toString()))
+        .andExpect(jsonPath("$.validationErrors.length()").value(5))
+        .andExpect(jsonPath("$.validationErrors[*].field",
+            containsInAnyOrder("workoutId", "exerciseId", "weight", "sets", "reps")));
+}
+
+// This tests fields with specific rules
+@Test
+@Transactional
+void shouldReturnErrorResponseWhenWeightSetsAndRepsDontHaveMinValue() throws Exception {
+    var request = new LogExerciseRequest(
+        1,
+        1,
+        0,
+        0,
+        -1,
+        null,
+        null
+    );
+
+    mockMvc.perform(logExerciseRequest(request))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errorCode").value(ErrorCode.VALIDATION.toString()))
+        .andExpect(jsonPath("$.validationErrors.length()").value(3))
+        .andExpect(jsonPath("$.validationErrors[*].field",
+            containsInAnyOrder("weight", "sets", "reps")))
+}
+```
+
+I'm sure there's a more lightweight method to test the request gets validated, but I haven't been able to figure that out yet.
+
+Everything is now tested properly - I think we spent longer writing the tests to make sure it works than actually writing the code we tested. In the future I'll skip adding test code to these posts unless there's something particularly interesting about them, as they can be quite samey.
 
 ## Refactoring: Spring Security User
 
-Whilst i was writing these endpoints, there's one thing I noticed with our implementation of Spring Security which bugged me. We have two models for `User`, one of them is a Spring Security class which implements `UserDetails`, and the other is our own `User` model.
+Whilst I was writing these endpoints, there's one thing I noticed with our implementation of Spring Security which bugged me. We have two models for `User`, one of them is a Spring Security class which implements `UserDetails`, and the other is our own `User` model.
 
 The Spring Security model would be fine if we were using `user.email` as our primary key in the `user` table, but we aren't, we're using the ID. That means in order to set the `user_id` foreign key in our `workout` table, we have to lookup the ID using the user's email. Take a look at this example:
 
@@ -683,19 +776,74 @@ public String protectedRoute(@AuthenticationPrincipal User user) {
 
 It actually returns our own `User` model.
 
-In hindsight, I don't know why I didn't do this in the first place - if there was a reason, I don't remember it. Anyway, back to building those endpoints...
+In hindsight, I don't know why I didn't do this in the first place - if there was a reason, I don't remember it. 
 
-todo: Write about a bug where the user model changes and sessions stop working - can we get around this?
+> **Side note**: Whilst implementing this, I noticed that if you change the structure of the class which Spring  Security stores in the session (the one implementing `UserDetails`), it will cause any existing session that's load to throw a `InvalidClassException` exception. This is because Spring Session saves session attribute values (in this case, the Spring Security context) as an [array of bytes](https://docs.spring.io/spring-session/reference/configuration/jdbc.html#:~:text=By%20default%2C%20Spring%20Session%20JDBC,Serialization%20of%20the%20attribute%20value.) created by `ObjectOutputStream#writeObject`. In the future we'll change the session attribute table to save session attributes as JSON.
+
+Anyway, back to building those endpoints...
 
 ## Building more endpoints
 
+There's a couple more endpoint we need to build to finish off our API.
 
+### Start workout
+
+This endpoint will be called when the user wants to finish their workout.
+
+We'll map it to `POST /api/v1/workout/{workoutId}/finish`  and the request body will look like this:
+
+```json
+{
+    "notes": "Some notes for the workout"
+}
+```
+
+This is really simple to implement, finishing a workout entails setting the `finished_on` column to the current time, and adding any user-provided notes:
+
+```java
+public boolean finishWorkout(@NotNull User user, @NotNull Integer workoutId, String notes) {
+    var workout = workoutDao.findOneWithUser(workoutId);
+    if (workout == null) {
+        return false;
+    }
+
+    if (!workout.getUser().equals(user)) {
+        return false;
+    }
+
+    workoutDao.updateFinishedOnAndNotes(workoutId, LocalDateTime.now(), notes);
+
+    return true;
+}
+```
+
+As with our previous endpoints, we wrote some tests for each layer to make sure everything behaves the way we expect it to.
+
+### Log weight
+
+This endpoint will be called when the user wants to log their weight.
+
+We'll map it to `POST /api/v1/user/weight/` and the request body will look like this:
+
+```json
+{
+    "weight": 80.4
+}
+```
+
+This is also very simple to implement, we simply need to create a new record in our `body_weight` table with the `user_id` of the authenticated user and the new body weight:
+
+```java
+public void logBodyWeight(@NotNull User user, Double bodyWeight) {
+    bodyWeightDao.create(user.getId(), bodyWeight);
+}
+```
 
 
 ## Conclusion
 
-Some text
+We've now built all of the endpoints that are required to implement our app's basic functionality - we may need to add more or modify the existing endpoints in the future, but have all we need to get started building our mobile app.
 
-In the next part we'll...
+In the next part, we'll start building our React Native app and implementing our endpoints.
 
 [Bye for now](https://www.youtube.com/watch?v=JgFvNzLAWtY)
