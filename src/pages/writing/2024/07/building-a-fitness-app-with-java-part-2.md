@@ -2,12 +2,16 @@
 layout: '@layouts/BlogLayout.astro'
 title: 'Building a fitness tracking app with Java - Part two'
 pubDate: 2024-07-09
-description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
-series_posts: 
+description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.' 
+series_posts:
   - name: Part one
-    path: writing/2024/07/building-a-fitness-app-with-java-part-1
-  - name: Part three 
-    path: writing/2024/07/building-a-fitness-app-with-java-part-3
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-1
+  - name: Part two
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-2
+  - name: Part three
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-3
+  - name: Part four
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-4
 ---
 
 - [What we're going to work on](#what-were-going-to-work-on)

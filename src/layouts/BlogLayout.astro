@@ -4,6 +4,7 @@ import PrettyDate from '@components/PrettyDate.astro';
 import BaseLayout from '@layouts/BaseLayout.astro';
 
 const { frontmatter } = Astro.props;
+const { pathname } = Astro.url;
 
 const isPostPartOfSeries = frontmatter.series_posts && frontmatter.series_posts.length > 0;
 ---
@@ -16,7 +17,11 @@ const isPostPartOfSeries = frontmatter.series_posts && frontmatter.series_posts.
                 <div class="post__series-header">
                     {
                         frontmatter.series_posts?.map((post: {path: string, name: string}) => {
-                            return (<a href={'/' + post.path}>{post.name}</a>)
+                            return (
+                                <a 
+                                    href={post.path}
+                                    class={post.path === pathname ? 'active' : ''}>{post.name}</a>
+                            )
                         })
                     }
                 </div>

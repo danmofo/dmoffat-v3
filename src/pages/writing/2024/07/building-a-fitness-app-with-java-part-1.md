@@ -4,10 +4,14 @@ title: 'Building a fitness tracking app with Java - Part one'
 pubDate: 2024-07-07
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
 series_posts:
+  - name: Part one
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-1
   - name: Part two
-    path: writing/2024/07/building-a-fitness-app-with-java-part-2
-  - name: Part three 
-    path: writing/2024/07/building-a-fitness-app-with-java-part-3
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-2
+  - name: Part three
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-3
+  - name: Part four
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-4
 ---
 
 - [The problem](#the-problem)

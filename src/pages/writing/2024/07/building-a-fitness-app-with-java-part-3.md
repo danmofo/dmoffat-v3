@@ -5,9 +5,13 @@ pubDate: 2024-07-10
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
 series_posts:
   - name: Part one
-    path: writing/2024/07/building-a-fitness-app-with-java-part-1
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-1
   - name: Part two
-    path: writing/2024/07/building-a-fitness-app-with-java-part-2
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-2
+  - name: Part three
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-3
+  - name: Part four
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-4
 ---
 
 - [What we're going to work on](#what-were-going-to-work-on)
@@ -22,7 +26,7 @@ series_posts:
 
 ## What we're going to work on
 
-As mentioned in [part two](/writing/2024/07/building-a-fitness-app-with-java-part-2), we're going to start building the individual endpoints that make up our API - finally we get to actually write something useful 😊
+As mentioned in [part two](/writing/2024/07/building-a-fitness-app-with-java-part-2), we're going to start building the individual endpoints that make up our API - finally we get to write something useful 😊
 
 ## Building endpoints
 
@@ -32,12 +36,12 @@ Most endpoints are going to follow the same general process:
 - Write a service method that does something useful, with some associated tests
 - If necessary, write some tests for:
   - **Controller**, to ensure it validates the request, and returns the correct response
-  - **Service**, these tests will use mocked DAOs
+  - **Service**, to ensure it returns the correct response, given certain inputs from the DAOs
   - **DAO**, these tests will be against a real database, to make sure our queries are working as intended.
 
 If I wasn't trying to build this as fast as possible, I'd write an OpenAPI spec at this point, and generate the backend/frontend code from that.
 
-Based on our [application flow](http://localhost:4321/writing/2024/07/building-a-fitness-app-with-java-part-1#designing-the-app-flow), the first thing we'll need to build is the **start workout endpoint**
+Based on our [application flow](http://localhost:4321/writing/2024/07/building-a-fitness-app-with-java-part-1#designing-the-app-flow), the first thing we'll need to build is the **start workout endpoint**.
 
 ### Start workout
 
@@ -844,6 +848,6 @@ public void logBodyWeight(@NotNull User user, Double bodyWeight) {
 
 We've now built all of the endpoints that are required to implement our app's basic functionality - we may need to add more or modify the existing endpoints in the future, but have all we need to get started building our mobile app.
 
-In the next part, we'll start building our React Native app and implementing our endpoints.
+In the next part, we'll start building our React Native app and start calling our endpoints.
 
 [Bye for now](https://www.youtube.com/watch?v=JgFvNzLAWtY)

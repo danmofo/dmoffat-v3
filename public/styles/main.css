@@ -18,9 +18,16 @@
     --font-body-text-colour: #454545;
     --link-colour: hsl(202.66deg 57.43% 40%);
 
+    /* Blog post main header */
     --blog-post-header-text-colour: #fff;
     --blog-post-header-colour: hsl(202.66deg 57.43% 50%);
+
+    /* Post series header */
     --blog-post-series-header-colour: #3691c938;
+    --blog-post-series-header-active-colour: var(--blog-post-header-colour);
+    --blog-post-series-header-text-colour: #fff;
+
+
     --blockquote-background-colour: hsl(323.5deg 57.43% 50%);
     --blockquote-text-colour: #FFF;
 
@@ -228,8 +235,9 @@ a {
 }
 
 .post img {
-    max-width: 100%;
-    height: auto;
+    width: auto;
+    max-height: 500px;
+    margin: 0 auto;
 }
 
 .post__title {
@@ -263,6 +271,12 @@ a {
     background-color: var(--blog-post-series-header-colour);
     font-size: var(--14px);
     display: inline-block;
+    text-decoration: none;
+}
+
+.post__series-header a.active {
+    background-color: var(--blog-post-series-header-active-colour);
+    color: var(--blog-post-series-header-text-colour);
 }
 
 .post__series-header a:last-child {
