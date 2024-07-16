@@ -3,6 +3,7 @@ layout: '@layouts/BlogLayout.astro'
 title: 'Building a fitness tracking app with Java - Part four'
 pubDate: 2024-07-16
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
+draft: true
 series_posts:
   - name: Part one
     path: /writing/2024/07/building-a-fitness-app-with-java-part-1

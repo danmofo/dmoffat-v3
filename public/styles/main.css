@@ -346,9 +346,9 @@ blockquote a {
 .draft-warning {
     background-color: var(--draft-warning-background-colour);
     color: var(--draft-warning-text-colour);
-    margin-top: 15px;
-    margin-bottom: 15px;
-    padding: 20px;
+    margin: 0;
+    padding: 10px;
+    display: inline-block;
 }
 
 .draft-warning p {
