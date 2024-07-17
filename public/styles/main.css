@@ -347,7 +347,7 @@ blockquote a {
     background-color: var(--draft-warning-background-colour);
     color: var(--draft-warning-text-colour);
     margin: 0;
-    padding: 10px;
+    padding: 5px 10px;
     display: inline-block;
 }
 
