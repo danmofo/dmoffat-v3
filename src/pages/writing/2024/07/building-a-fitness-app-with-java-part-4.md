@@ -23,6 +23,8 @@ series_posts:
   - [Log in screen](#log-in-screen)
     - [Form validation](#form-validation)
     - [Sending a request to our API](#sending-a-request-to-our-api)
+    - [Handling loading and error states](#handling-loading-and-error-states)
+    - [Storing our session token](#storing-our-session-token)
   - [Dashboard](#dashboard)
 - [Conclusion](#conclusion)
 
@@ -144,7 +146,8 @@ We use native buttons for now with inline event handlers, later on we'll create 
 The log in screen's sole purpose is to authenticate the current user and obtain a session token for use later on. This screen is interesting as we'll need to implement a few things:
 - Form validation
 - Sending a request to our API
-- Storing our session token in some global state
+- Handling loading and error states
+- Storing our session token
 
 #### Form validation
 
@@ -270,6 +273,157 @@ The only thing that's left to do is add email validation to the email address fi
 That's validation done - next we need to send the request to our API.
 
 #### Sending a request to our API
+
+In order to send a request to our API we'll need to write:
+- A request/response type for our function
+- A function that sends a login request to our API
+
+For this I'm just going to use plain old `fetch` (maybe later on I'll refactor to use `react-query`) to keep things simple.
+
+Our request/response types look like this - I'm not 100% sure this is the right way to model these types
+with TypeScript.
+
+```ts
+type LoginRequest = {
+    email: string,
+    password: string
+}
+
+type ValidationError = {
+    field: string,
+    message: string
+}
+
+type ValidationErrorResponse = {
+    errorCode?: ErrorCode,
+    validationErrors?: ValidationError[]
+}
+
+type InvalidCredentialsResponse = {
+    errorCode?: ErrorCode
+}
+
+type LoginSuccessResponse = {
+    success?: boolean,
+    sessionToken?: string
+}
+
+// Possible results:
+// - Validation errors
+// - Invalid email/password
+// - Success!
+type LoginResponse = LoginSuccessResponse & InvalidCredentialsResponse & ValidationErrorResponse;
+```
+
+And our function looks like this:
+
+```ts
+export async function login(request: LoginRequest): Promise<LoginResponse> {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(request)
+        });
+
+        const json = await response.json();
+
+        // Extract the session token if the login request succeeded
+        if(json.success) {
+            const sessionToken = response.headers.get('X-Auth-Token');
+            if (sessionToken) {
+                json.sessionToken = sessionToken;
+            }
+        }
+
+        return json;
+    } catch (e) {
+        return {
+            success: false
+        }
+    }
+}
+```
+
+We intentionally do not check `response.ok` as validation/server errors return a non-OK status, and we'd like them to be converted to JSON. We handle all `fetch` exceptions the same way - later on we may handle these cases differently (e.g. network down), but for now this is fine.
+
+> **Side note**: We are not handling request timeouts here either - we'll add that later on.
+
+Then we can call it in our component like so:
+
+```ts
+async function handlePressLogInButton() {
+    console.log('Logging in - valid? ', isValid);
+
+    const { success, errorCode, sessionToken } = await login(getValues());
+    if (!success) {
+        console.log('Failed to login', errorCode);
+        return;
+    }
+
+    console.log('Login success!', sessionToken);
+}
+```
+
+This works great! The only problem is that when we press the submit button there's no loading state, and we also do not tell the user that their credentials are incorrect if the request failed - let's do that next.
+
+#### Handling loading and error states
+
+The easiest way to deal with these are to create some state variables stored in React state (`useState`):
+
+```ts
+const [loading, setLoading] = useState<boolean>(false);
+const [authError, setAuthError] = useState<ErrorCode | null | undefined>();
+```
+
+Then in our event handler, set them appropriately:
+
+```ts
+async function handlePressLogInButton() {
+    console.log('Logging in - valid? ', isValid);
+
+    setAuthError(null);
+    setLoading(true);
+    
+    const { success, errorCode, sessionToken } = await login(getValues());
+    if (!success) {
+        console.log('Failed to login', errorCode);
+        setLoading(false);
+        setAuthError(errorCode);
+        return;
+    }
+
+    console.log('Login success!', sessionToken);
+    setLoading(false);
+}
+```
+
+Finally, we can update our component to display a loading indicator when the request is in progress:
+
+```jsx
+{
+    loading ? 
+    <ActivityIndicator size={32} /> :
+    <Button title="Log in" onPress={handleSubmit(handlePressLogInButton)}/>
+}
+```
+
+And display an error message if it fails...
+
+```jsx
+{
+    authError ?
+    <FieldErrorMessage fieldError={{type: authError, message: 'Invalid credentials'}} /> :
+    null
+}
+```
+
+Next we need to store our session token so it can be used later on.
+
+#### Storing our session token
+
 
 ### Dashboard
 
