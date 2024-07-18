@@ -25,7 +25,11 @@ series_posts:
     - [Sending a request to our API](#sending-a-request-to-our-api)
     - [Handling loading and error states](#handling-loading-and-error-states)
     - [Storing our session token](#storing-our-session-token)
-  - [Dashboard](#dashboard)
+    - [Post authentication steps](#post-authentication-steps)
+  - [Dashboard screen](#dashboard-screen)
+    - [Creating our own \<Button\> component](#creating-our-own-button-component)
+  - [Log weight screen](#log-weight-screen)
+    - [Building the form](#building-the-form)
 - [Conclusion](#conclusion)
 
 ## What we're going to work on
@@ -148,6 +152,7 @@ The log in screen's sole purpose is to authenticate the current user and obtain 
 - Sending a request to our API
 - Handling loading and error states
 - Storing our session token
+- Post authentication steps
 
 #### Form validation
 
@@ -424,10 +429,277 @@ Next we need to store our session token so it can be used later on.
 
 #### Storing our session token
 
+In React Native apps there are two different places we can store data:
+- Secure storage, ...
+- Async storage, ...
 
-### Dashboard
+Because the session token is sensitive, we'll store it in secure storage.
 
-Some text.
+First we'll need to install it:
+
+```bash
+npx expo install expo-secure-store
+```
+
+Now we could just update our `handlePressLogInButton` function to save this value:
+
+```ts
+import * as SecureStore from 'expo-secure-store';
+
+SecureStore.setItemAsync('sessionToken', 'our-session-token');
+```
+
+Then later on when we need it:
+
+```ts
+SecureStore.getItemAsync('sessionToken');
+```
+
+The problem with this is that each time we need to use this value, we'll either need to copy and paste this line, or fetch it once in the top-most component, then pass `sessionToken` as a prop through all our components (aka prop drilling.) 
+
+A better way to do this would be to store this value in a `React` context, then each child compoonents that needs access to it can just grab it, and child components that need to set it can just call the setter function. It would look something like this:
+
+```jsx
+// In our top-level component (the thing that wraps the whole app)
+
+function RootLayout() {
+    // We could also use getItemAsync inside a useEffect
+    const token = SecureStore.getItem('sessionToken');
+    const [sessionToken, setSessionToken] = useState(token);
+
+    <AuthContext.Provider value={[sessionToken, setSessionToken]}>
+        {/* Other components */}
+    </AuthContext.Provider>
+}
+```
+
+Then in a child component that needs to set it (e.g. our log in form):
+
+```jsx
+function LogInForm() {
+    const [sessionToken, setSessionToken] = useContext(AuthContext);
+
+    // Do auth request
+    // ...
+
+    setSessionToken('our-new-token');
+}
+```
+
+And in a child component that needs to access it:
+
+```jsx
+function AnotherComponent() {
+    const [sessionToken] = useContext(AuthContext);
+
+    requestWhichRequiresSessionToken(sessionToken);
+}
+```
+
+Using this method, child components can easily access the session token.
+
+This approach works just fine and requires no additional libraries (context is a part of React). However I can forsee more than just the session token being needed throughout the app (for example, the authenticated user's details), so at this point I'm going to reach for a state-management library - [Zustand](https://github.com/pmndrs/zustand) to simplify things.
+
+The reason I chose Zustand is that I have used it on another project, so it's familar, and it has a really cool feature where it can automatically persist your state to some persistent storage, without needing to make that call manually - in our case we wouldn't need to manually save the session token to secure storage, we could simply set its value in a zustand store, and it will automagically persist it.
+
+First let's install it:
+
+```bash
+npm i zustand
+```
+
+Then we'll create our first store, first we'll need to define our state that will be stored and functions that will manipulate said state:
+
+```ts
+export type AuthState = {
+    sessionToken: string,
+    saveSessionToken: (sessionToken: string) => void,
+    logOut: () => void
+}
+```
+
+Next we'll create a store that uses this:
+
+```ts
+export const useAuthStore = create(
+    persist<AuthState>(
+        (set) => ({
+            sessionToken: '',
+            saveSessionToken: (sessionToken: string) => {
+                set({ sessionToken });
+            },
+            logOut: () => {
+                set({
+                    sessionToken: ''
+                });
+            }
+        }),
+        // Persist the state as JSON in SecureStore
+        {
+            name: 'auth-storage',
+            storage: createJSONStorage(() => secureStoreStorage)
+        }
+    )
+);
+```
+
+This is pretty simple, in the store you implement any methods that are defined in your state, and the bottom part defines how our state should be stored - in our case the state will be serialised to JSON, then saved in SecureStore.
+
+Zustand doesn't come with this functionality out of the box, but it does provide an interface that you can implement, so that's what we did - in the above example `secureStoreStorage` is defined like this:
+
+```ts
+const secureStoreStorage: StateStorage = {
+    getItem: async function (name: string) {
+        return await SecureStore.getItemAsync(name);
+    },
+    setItem: async function (name: string, value: string) {
+        return await SecureStore.setItemAsync(name, value);
+    },
+    removeItem: async function (name: string) {
+        return await SecureStore.deleteItemAsync(name);
+    }
+}
+```
+
+As long as your object conforms to the interface, Zustand will be able to use it to persist state. This is really flexible, and I was quite surprised how easy it was to implement this.
+
+Finally, we can now use Zustand to save our session token, let's update `LogInForm`:
+
+```jsx
+function LogInForm() {
+    const saveSessionToken = useAuthStore(state => state.saveSessionToken);
+
+    // Later on..
+    saveSessionToken('our-session-token');
+}
+```
+
+And that's it! Our session token will now be persisted in secure storage and other components that need it will be able to retrieve it like this:
+
+```ts
+const sessionToken = useAuthStore(state => state.sessionToken);
+```
+
+Simple!
+
+####  Post authentication steps
+
+The final part of this form is doing something when authentication is successful, in our case, we'd like to send them to the dashboard screen.
+
+We could implement this directly in `LogInForm`, by hard-coding this line after authentication succeeds:
+
+```ts
+router.replace('/dashboard');
+```
+
+However this means we won't be able to use `LogInForm` anywhere else - for example, we may want the user to re-authenticate when doing something sensitive in their account. To get around this, we should leave the decision of what to do after authenticating, to the parent component that includes the form.
+
+Let's give our `LogInForm` a new prop:
+
+```ts
+type LoginFormProps = {
+    onAuthSuccess: () => void
+}
+```
+And update the parent component to do something with that:
+
+```jsx
+function handleAuthSuccess() {
+    router.navigate('/dashboard');
+}
+
+<LogInForm onAuthSuccess={handleAuthSuccess} />
+```
+
+Now our `LogInForm` component can be used elsewhere.
+
+### Dashboard screen
+
+The dashboard will be fairly simple - for now it will have 2 sections, one for start a workout and the other will be to log your weight. Eventually the dashboard will contain stats (last workout, weight progress, etc), but for this initial version, we'll keep it simple:
+
+```jsx
+export default function DashboardScreen() {
+    return (
+        <ScreenLayout screenHasHeader={false}>
+            <Box flex={1} padding={20}>
+                <Heading>Log workout</Heading>
+                <Text>Here you can log your workout</Text>
+            </Box>
+            <Box flex={1} padding={20}>
+                <Heading>Log weight</Heading>
+                <Text>Here you can log your weight</Text>
+            </Box>
+        </ScreenLayout>
+    )
+}
+```
+
+#### Creating our own &lt;Button&gt; component
+
+Next we need to add some buttons which link to other sections. On the homepage, we used React Native's `<Button>` component with an `onPress` to navigate between pages, let's improve that by creating our own button component:
+
+```jsx
+type ButtonProps = {
+    title: string,
+    onPress?: () => void,
+    href?: string
+}
+
+export default function Button({ href, title, onPress = () => {} }: ButtonProps) {
+    // If there's an href, wrap with expo-router's <Link> component to navigate.
+    if(href) {
+        return (
+            <Link 
+                href={href} 
+                style={styles.buttonContainer} 
+                asChild>
+                <Pressable>
+                    <Text style={styles.buttonText}>
+                        {title}
+                    </Text>
+                </Pressable>
+            </Link>
+        )
+    }
+
+    // Otherwise use a <Pressable> with onPress
+    return (
+        <Pressable style={styles.buttonContainer} onPress={() => onPress()}>
+            <Text style={styles.buttonText}>
+                {title}
+            </Text>
+        </Pressable>
+    )
+}
+```
+
+It's still missing a lot of functionality - different button styles (primary, secondary, muted, disabled, etc) and an active/pressed state but will do for now as it lets us either navigate between pages, or execute a callback when pressed.
+
+We can use it like this:
+
+```jsx
+// To navigate to another view
+<Button title="Click me" href="/my-page" />
+
+// To execute some code
+<Button title="Click me" onPress={() => console.log('Clicked!')} />
+```
+
+And that's it for the dashboard, for now it's very unremarkable, and just serves as a hub to access other functionality.
+
+### Log weight screen
+
+The purpose of this screen is for the user to log their weight for today. We need to build a few things for this screen:
+- A form to enter the weight
+- A list of previous logged weights - this wasn't in my original plan, but I thought I'd add it for the initial version.
+
+#### Building the form
+
+We can use our login page for inspiration here, we need to do the following:
+- Define the form model
+- Create the input fields
+- Create the submit button
+- Write the event handler that gets called when you press the submit button
 
 ## Conclusion
 
