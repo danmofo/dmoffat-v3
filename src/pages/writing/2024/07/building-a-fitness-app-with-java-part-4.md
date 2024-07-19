@@ -3,7 +3,6 @@ layout: '@layouts/BlogLayout.astro'
 title: 'Building a fitness tracking app with Java - Part four'
 pubDate: 2024-07-16
 description: 'How I built a fitness tracking app using Java, MySQL, React Native and more.'
-draft: true
 series_posts:
   - name: Part one
     path: /writing/2024/07/building-a-fitness-app-with-java-part-1
@@ -31,6 +30,7 @@ series_posts:
   - [Log weight screen](#log-weight-screen)
     - [Building the form](#building-the-form)
     - [Listing previously logged weights](#listing-previously-logged-weights)
+  - [Adding a log out button](#adding-a-log-out-button)
 - [Conclusion](#conclusion)
 
 ## What we're going to work on
@@ -39,7 +39,7 @@ As mentioned in [part three](/writing/2024/07/building-a-fitness-app-with-java-p
 
 I decided to use React Native as it's something I've recently (around a month and a half) been introduced to at work and I thought it would be a good way to develop those skills further. I found the developer experience for React Native really nice, and I can use tools/languages I'm already familiar with (JS/TS/CSS/etc.).
 
-It's worth mentioning at this point - **I am by no means an expert in RN development**, everything you see in this post is the result of reading the documentation and trial and error 🙂 I'll be refactoring as I go along.
+It's worth mentioning at this point - **I am by no means an expert in RN development**, everything you see in this post is the result of reading the documentation and trial and error 🙂 The initial version is probably not going to be great, but over time (in future posts) I'll refactor and improve it.
 
 ## Creating a new React Native project
 
@@ -859,10 +859,74 @@ It works! The app displays `1` as the length of `bodyWeights` and when I print o
 
 I then updated my migration script to include some historical body weights for myself, so we can see how this screen behaves when there are lots of records.
 
-Now let's update the view so the weights display in a scrollable list - we'll improve this later on.
+Now let's update the view so the weights display in a scrollable list:
+
+```jsx
+<Box>
+    <Box padding={20}>
+        <Heading>Your weight history</Heading>
+    </Box>
+
+    <View style={styles.listHeadingContainer}>
+        <Text style={styles.listHeading}>Weight</Text>
+        <Text style={styles.listHeading}>Date</Text>
+    </View>
+    {
+        bodyWeights?.length ?
+        <FlatList
+            data={bodyWeights}
+            keyExtractor={(item) => {
+                return item.id.toString()
+            }}
+            renderItem={({ item }) => {
+                return (
+                    <View style={styles.listItem}>
+                        <Text style={styles.listItemDataWeight}>{item.weight}kg</Text>
+                        <Text style={styles.listItemDataLoggedOn}>{item.loggedOn}</Text>
+                    </View>
+                    
+                )
+            }}
+        />:
+        <Text>You haven't logged any body weights yet.</Text>
+    }
+</Box>
+```
+This is pretty straightforward, we display our list of items in a `FlatList` and now our screen looks like this:
+
+![The log weight screen in our app](../../../../assets/images/fitness-app-article/log-weight-screen.jpg)
+
+I think that will do for this screen for now.
+
+### Adding a log out button
+
+We currently don't have a way to log out from our app - let's write that now.
+
+On the dashboard we'll add a button, and hook it up to an event handler:
+
+```jsx
+<Button title="Log out" onPress={handleLogOut} />
+```
+
+```ts
+const auth = useAuthStore();
+
+function handleLogOut() {
+    auth.logOut();
+    router.navigate('/');
+}
+```
+
+The `logOut` function is from our auth store, all it does it deletes the session token that's stored on the device.
+
+And that's it! Pressing the button takes us back to the homepage.
 
 ## Conclusion
 
-In the next part we'll
+We've got a lot accomplished in this post, we've scaffolded our React Native app, wrote the homepage, dashboard and log weight screens and got our app communicating with our API. Although our app doesn't look the greatest (and there's lots of room for improvement in the code), we can improve that later on.
+
+I created a quick video [here](https://youtube.com/shorts/lPdj9vlc-us?feature=share) which demonstrates everything I've built so far, and how the app looks like. The video is very low quality as it was screen recorded on my phone, then sent through WhatsApp.
+
+In the next part, we'll begin work on the main part of the app: the log workout screen - this is where you'll enter your exercise, sets, reps, weight, etc and is the main function of the app.
 
 [Bye for now](https://www.youtube.com/watch?v=JgFvNzLAWtY)
