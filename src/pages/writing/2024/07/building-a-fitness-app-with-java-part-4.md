@@ -30,6 +30,7 @@ series_posts:
     - [Creating our own \<Button\> component](#creating-our-own-button-component)
   - [Log weight screen](#log-weight-screen)
     - [Building the form](#building-the-form)
+    - [Listing previously logged weights](#listing-previously-logged-weights)
 - [Conclusion](#conclusion)
 
 ## What we're going to work on
@@ -700,6 +701,165 @@ We can use our login page for inspiration here, we need to do the following:
 - Create the input fields
 - Create the submit button
 - Write the event handler that gets called when you press the submit button
+
+
+Let's write a form model:
+
+```ts
+type LogWeightForm = {
+    weight: number
+}
+```
+
+...and an input field/submit button
+
+```jsx
+<View>
+    <Controller 
+        control={control}
+        name="weight"
+        rules={{
+            required: 'Please enter a weight'
+        }} 
+        render={({ field: { onChange, value } }) => (
+            <View>
+                <TextInput 
+                    value={value?.toString()}
+                    onChangeText={onChange}
+                    style={formStyles.input}
+                    placeholder="Enter weight"
+                    keyboardType="number-pad"
+                />
+                <Text style={styles.inputUnitType}>kg</Text>
+            </View>
+        )}
+    />
+    <FieldErrorMessage fieldError={errors.weight} />
+</View>
+
+/// ...
+
+<Button title="Log weight" onPress={handleSubmit(handlePressLogWeightButton)} />
+```
+
+Then finally, let's write the event handler that gets called when we press the button, and hook it up to our API call:
+
+```ts
+async function handlePressLogWeightButton() {
+    setLoading(true);
+
+    const weight = getValues().weight;
+    const { success } = await logWeight({
+        sessionToken,
+        weight
+    });
+
+    setLoading(false);
+
+    if(success) {
+        setComplete(true);
+    }
+}
+```
+
+Pretty simple stuff - set a loading state when the button is pressed, call the API, hide the loading state and finally if the request was successful, set the `complete` field to `true` so we can update the UI telling the user their weight was logged.
+
+#### Listing previously logged weights
+
+Before we can build this feature, we'll need to go back to our backend and write an endpoint that lists weights for a user.
+
+The controller looks like this:
+
+```java
+@GetMapping("/api/v1/user/weight/")
+public ResponseEntity<ApiResponse> listBodyWeight(@AuthenticationPrincipal User user) {
+
+    var bodyWeights = userBodyWeightService.findAll(user);
+
+    return ResponseEntity.ok(new ListBodyWeightResponse(bodyWeights));
+}
+```
+
+The service/DAO are straightforward enough that they don't need to be posted (all they do is list bodyweight from the database).
+
+Now let's update our screen to use this data.
+
+First we'll need to create some state to hold the body weight records in:
+
+```ts
+const [bodyWeights, setBodyWeights] = useState<UserBodyWeight[]>()
+```
+
+Then we'll need to fetch it in a `useEffect` hook and set that state (`listBodyWeight` always returns a list):
+
+```ts
+useEffect(() => {
+    (async () => {
+        const { bodyWeights } = await listBodyWeight({ sessionToken });
+        setBodyWeights(bodyWeights);
+    })();
+}, []);
+```
+
+And finally we'll need to display it (for now I just log the count):
+
+```jsx
+<Box flex={1} padding={20}>
+    <Heading>Weight history</Heading>
+    <Text>{bodyWeights?.length}</Text>
+</Box>
+```
+
+> **Side note** I (and you, probably) may have noticed this screen is getting quite large at this point, we'll refactor this shortly.
+
+
+Let's try it out! Hmmm, it doesn't work yet - we get an error message on our server:
+
+```
+com.fasterxml.jackson.databind.exc.InvalidDefinitionException: Java 8 date/time type `java.time.LocalDate` not supported by default: add Module "com.fasterxml.jackson.datatype:jackson-datatype-jsr310" to enable handling
+```
+
+This is because our model contains a `LocalDate`, and Jackson does not know how to convert that into JSON. Let's get that fixed.
+
+First we need to add the dependency:
+
+```xml
+<dependency>
+    <groupId>com.fasterxml.jackson.datatype</groupId>
+    <artifactId>jackson-datatype-jsr310</artifactId>
+    <version>2.17.2</version>
+</dependency>
+```
+
+Then we need to enable it:
+
+```java
+@Bean
+public ObjectMapper objectMapper() {
+    var objectMapper = new ObjectMapper();
+    // ...
+    objectMapper.registerModule(new JavaTimeModule());
+    // ...
+    return objectMapper;
+}
+```
+
+Then we need to tell Jackson how we want our `LocalDate` serialised:
+
+```java
+@JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd/MM/yyyy")
+private LocalDate loggedOn;
+```
+
+We do the date formatting on the server because:
+- We don't need i18n for our app
+- Our app can just use the value as-is, without needing to perform any formatting before displaying it
+
+It works! The app displays `1` as the length of `bodyWeights` and when I print out the date, it displays `19/07/2024`.
+
+I then updated my migration script to include some historical body weights for myself, so we can see how this screen behaves when there are lots of records.
+
+Now let's update the view so the weights display in a scrollable list - we'll improve this later on.
 
 ## Conclusion
 
