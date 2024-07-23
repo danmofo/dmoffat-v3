@@ -22,7 +22,8 @@ series_posts:
   - [Layout](#layout)
   - [Initial screen](#initial-screen)
   - [Select exercise screen](#select-exercise-screen)
-  - [Workout exercise screen](#workout-exercise-screen)
+  - [Exercise summary screen](#exercise-summary-screen)
+  - [Add exercise to workout screen](#add-exercise-to-workout-screen)
   - [Workout summary screen](#workout-summary-screen)
   - [Confirmation modal](#confirmation-modal)
   - [Success screen](#success-screen)
@@ -44,25 +45,27 @@ Due to the complexity of this part, I'm going to create some wireframes with a p
 
 ![Select exercise screen](../../../../assets/images/fitness-app-article/screen-select-exercise.jpg)
 
-**Workout exercise screen**
+**Exercise summary screen**
 
-![Workout exercise screen](../../../../assets/images/fitness-app-article/screen-workout-exercise.jpg)
+![Exercise summary screen](../../../../assets/images/fitness-app-article/screen-exercise-summary.jpg)
 
-After creating this, I realised I missed off a few bits: The weight and the form which the user will fill in to add another row to the table. Thinking about it, the page will be quite busy if we add a form above the list of exercises performed already, so I'll stick those on a separate screen.
+**Add exercise to workout screen**
 
-The weight will be displayed in the table, alongside reps and sets.
+![Add exercise to workout screen](../../../../assets/images/fitness-app-article/screen-add-exercise-to-workout.jpg)
 
 **Workout summary screen**
 
-![Workout summary screen](../../../../assets/images/fitness-app-article/screen-summary.jpg)
+![Workout summary screen](../../../../assets/images/fitness-app-article/screen-workout-summary.jpg)
 
 
 The flow is:
 - User clicks start workout on the initial screen
-- User is sent to the **select exercise screen**, this is where the user chooses the exercise
-- User is sent to the **workout exercise screen** with the previously selected exercise set as active, user can add sets, reps, equipment and notes to the exercise - they can also edit + delete individual sets if needed. Once complete, they can press back which will take them to the **workout summary screen**
-- From the **workout summary screen**, the user can:
-  - Add another exercise (which will send the user back to the **select exercise screen**) - this will either be a form, or a separate screen.
+- User is sent to the **select exercise screen**, this is where the user chooses the exercise.
+- User is sent to the **exercise summary screen** with the previously selected exercise set as active, this screen contains completed sets for the selected exercise, user clicks the "add set" button to add a new set
+- User is sent to the **Add exercise to workout screen**, this is where the user adds the sets, reps, equipment and notes, after finishing, they click "add".
+- User is sent back to the **exercise summary screen** with the previously added set displayed in table.
+- User can press back to go to the **workout summary screen**, the user can:
+  - Add another exercise (which will send the user back to the **select exercise screen**)
   - Add notes to their overall workout
   - View their existing exercises (and edit them if needed)
   - Finish the workout.
@@ -97,12 +100,7 @@ export default function LogWorkoutLayout() {
                     title: 'Select an exercise'
                 }}
             />
-            <Stack.Screen 
-                name="workout-add-exercise"
-                options={{
-                    title: 'Exercise name'
-                }}
-            />
+            {/* ... other routes go here...*/}
         </Stack>
     )
 }
@@ -382,14 +380,14 @@ Our exercise list is looking a bit bare, so at this point I'll update my migrati
 
 The only thing we have left to do now is keep track of the exercise that is currently selected, we can do this by storing it in our workout store after an exercise is selected:
 
-### Workout exercise screen
+### Exercise summary screen
 
-This is where the user adds their performed exercises to a workout. 
+This screen displays a summary of all completed sets for the current exercise, and the user can add their performed exercises to a workout.
 
 We want the screen's header to be dynamic (display the currently selected exercise's name), which requires us to move the `<Stack.Screen>` component into the route file, so we remove it from `_layout.tsx` and add it to our `workout-add-exercise.tsx` route:
 
 ```jsx
-export default function WorkoutAddExerciseScreen() {
+export default function ExerciseSummaryScreen() {
     const workoutStore = useWorkoutStore();
     const router = useRouter();
     const params = useLocalSearchParams()
@@ -402,12 +400,11 @@ export default function WorkoutAddExerciseScreen() {
     
     return (
         <ScreenLayout screenHasHeader={true}>
-            <Stack.Screen options={{
-                title: params.title
-            }} />
-            <Box padding={20}>
-                <Text>The current exercise is {workoutStore.currentExercise?.name}</Text>
-            </Box>
+            <Stack.Screen 
+                options={{
+                    title: params.title
+                }} 
+            />
         </ScreenLayout>
     )
 }
@@ -415,10 +412,25 @@ export default function WorkoutAddExerciseScreen() {
 
 Setting the params must be inside a `useEffect`, as setting it causes a re-render (and in turn, an infinite loop!).
 
-Next, we'll split up our page into components based on our wireframe, for now they'll just contain dummy content:
-- `<SelectedExercise>`, this will display the selected exercise
-- `<AddExerciseToWorkoutForm>`, this will contain the form the user enters their reps/sets/weight/notes to
-- `<WorkoutExerciseList>`, this will contain the list of exercises that have already been logged to this workout, and it will have buttons to edit/delete. This will be comprised of one `<WorkoutExerciseListItem>` for each set.
+Our page contains two sections:
+- A button to send them to the **add exercise to workout screen**
+- A table containing completed sets
+
+...
+
+### Add exercise to workout screen
+
+This screen contains a form the user fills in to add a set to an exercise. 
+
+The code looks something like this:
+
+```jsx
+// todo
+```
+
+After submitting the form, we need to do two things:
+1. Call our endpoint `/api/v1/blah` to add the exercise to the workout
+2. Save this exercise in some persistent storage, so that we can display it on the **exercise summary** screen.
 
 ### Workout summary screen
 
