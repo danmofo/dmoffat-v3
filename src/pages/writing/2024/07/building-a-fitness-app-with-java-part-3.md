@@ -12,6 +12,8 @@ series_posts:
     path: /writing/2024/07/building-a-fitness-app-with-java-part-3
   - name: Part four
     path: /writing/2024/07/building-a-fitness-app-with-java-part-4
+  - name: Part five
+    path: /writing/2024/07/building-a-fitness-app-with-java-part-5
 ---
 
 - [What we're going to work on](#what-were-going-to-work-on)
