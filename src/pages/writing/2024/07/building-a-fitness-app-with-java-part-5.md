@@ -19,6 +19,7 @@ series_posts:
 - [What we're going to work on](#what-were-going-to-work-on)
 - [Planning](#planning)
 - [Building screens](#building-screens)
+  - [Layout](#layout)
   - [Initial screen](#initial-screen)
   - [Select exercise screen](#select-exercise-screen)
   - [Workout exercise screen](#workout-exercise-screen)
@@ -35,15 +36,36 @@ As mentioned in [part four](/writing/2024/07/building-a-fitness-app-with-java-pa
 
 Due to the complexity of this part, I'm going to create some wireframes with a pen and paper before I start writing any code - here's what I came up with:
 
+**Start workout screen**
+
+![Start workout screen](../../../../assets/images/fitness-app-article/screen-start-workout.jpg)
+
+**Select exercise screen**
+
+![Select exercise screen](../../../../assets/images/fitness-app-article/screen-select-exercise.jpg)
+
+**Workout exercise screen**
+
+![Workout exercise screen](../../../../assets/images/fitness-app-article/screen-workout-exercise.jpg)
+
+After creating this, I realised I missed off a few bits: The weight and the form which the user will fill in to add another row to the table. Thinking about it, the page will be quite busy if we add a form above the list of exercises performed already, so I'll stick those on a separate screen.
+
+The weight will be displayed in the table, alongside reps and sets.
+
+**Workout summary screen**
+
+![Workout summary screen](../../../../assets/images/fitness-app-article/screen-summary.jpg)
+
+
 The flow is:
 - User clicks start workout on the initial screen
-- User is sent to the **select exercise screen**, this is where the user chooses the current exercise
+- User is sent to the **select exercise screen**, this is where the user chooses the exercise
 - User is sent to the **workout exercise screen** with the previously selected exercise set as active, user can add sets, reps, equipment and notes to the exercise - they can also edit + delete individual sets if needed. Once complete, they can press back which will take them to the **workout summary screen**
 - From the **workout summary screen**, the user can:
-  - Add another exercise (which will send the user back to the **select exercise screen**)
+  - Add another exercise (which will send the user back to the **select exercise screen**) - this will either be a form, or a separate screen.
   - Add notes to their overall workout
   - View their existing exercises (and edit them if needed)
-  - finish the workout.
+  - Finish the workout.
 - Clicking the finish workout button will prompt the user with a **confirmation modal**, asking them if they want to finish the workout. The initial version won't have a way to edit workouts so we need an additional barrier to stop users accidentally clicking the button.
 - After confirming the workout is finished, they'll be shown a **success screen**.
 
@@ -52,6 +74,39 @@ We don't know how this will perform in practice until we actually use it during 
 ## Building screens
 
 We've already built the APIs that power these screens, so most of the coding we'll do will be building the screens and talking to our APIs.
+
+### Layout
+
+First we'll create a separate layout for the log workout process so that we have a header (so far the app hasn't used any headers). The header contains useful things such as a title, and a back button. This is as simple as creating a `_layout.tsx` file in our `log-workout` folder with the following contents:
+
+```jsx
+import { Stack } from "expo-router";
+
+export default function LogWorkoutLayout() {
+    return (
+        <Stack>
+            <Stack.Screen 
+                name="index"
+                options={{
+                    headerShown: false
+                }}
+            />
+            <Stack.Screen 
+                name="select-exercise"
+                options={{
+                    title: 'Select an exercise'
+                }}
+            />
+            <Stack.Screen 
+                name="workout-add-exercise"
+                options={{
+                    title: 'Exercise name'
+                }}
+            />
+        </Stack>
+    )
+}
+```
 
 ### Initial screen
 
@@ -154,12 +209,13 @@ async function handleStartWorkout() {
 }
 ```
 
-The final thing, which I noticed whilst developing this screen is that whilst developing, we'll end up with a bunch of workout IDs for abandoned workouts. To get around this, when the initial screen loads, we'll see if there's an existing workout saved and if there is, skip the step which starts the workout on the server:
+The final thing, which I noticed whilst developing this screen is that when going through the "Start workout" flow, we'll end up with a bunch of workout IDs for abandoned workouts. To get around this, when you click "START", we'll check for any workouts that are in progress.
 
 ```ts
 if(workoutStore.hasWorkoutInProgress()) {
     console.log('Workout already started.');
     router.navigate('/log-workout/select-exercise');
+    return;
 }
 ```
 
@@ -294,7 +350,7 @@ However this has a few problems:
 1. We lose the original unfiltered list of exercises and would have to create another state variable to hold the filtered list
 2. It causes two re-renders, this is unnoticeable to me, but is just unnecessary work that doesn't need to be done.
 
-We can compute the filtered exercises in the component body from the `exercises` and `query` variables ((non-relevant code has been removed)):
+We can compute the filtered exercises in the component body from the `exercises` and `query` variables (irrelevant code has been removed):
 
 ```jsx
 export default function SelectExerciseScreen() {    
@@ -327,6 +383,42 @@ Our exercise list is looking a bit bare, so at this point I'll update my migrati
 The only thing we have left to do now is keep track of the exercise that is currently selected, we can do this by storing it in our workout store after an exercise is selected:
 
 ### Workout exercise screen
+
+This is where the user adds their performed exercises to a workout. 
+
+We want the screen's header to be dynamic (display the currently selected exercise's name), which requires us to move the `<Stack.Screen>` component into the route file, so we remove it from `_layout.tsx` and add it to our `workout-add-exercise.tsx` route:
+
+```jsx
+export default function WorkoutAddExerciseScreen() {
+    const workoutStore = useWorkoutStore();
+    const router = useRouter();
+    const params = useLocalSearchParams()
+
+    useEffect(() => {
+        router.setParams({
+            title: workoutStore.currentExercise?.name
+        });
+    }, []);
+    
+    return (
+        <ScreenLayout screenHasHeader={true}>
+            <Stack.Screen options={{
+                title: params.title
+            }} />
+            <Box padding={20}>
+                <Text>The current exercise is {workoutStore.currentExercise?.name}</Text>
+            </Box>
+        </ScreenLayout>
+    )
+}
+```
+
+Setting the params must be inside a `useEffect`, as setting it causes a re-render (and in turn, an infinite loop!).
+
+Next, we'll split up our page into components based on our wireframe, for now they'll just contain dummy content:
+- `<SelectedExercise>`, this will display the selected exercise
+- `<AddExerciseToWorkoutForm>`, this will contain the form the user enters their reps/sets/weight/notes to
+- `<WorkoutExerciseList>`, this will contain the list of exercises that have already been logged to this workout, and it will have buttons to edit/delete. This will be comprised of one `<WorkoutExerciseListItem>` for each set.
 
 ### Workout summary screen
 
