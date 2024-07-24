@@ -76,11 +76,11 @@ We don't know how this will perform in practice until we actually use it during 
 
 ## Building screens
 
-We've already built the APIs that power these screens, so most of the coding we'll do will be building the screens and talking to our APIs.
+We've already built the APIs that power these screens, so most of the coding we'll do will be writing the screen layouts and talking to our APIs.
 
 ### Layout
 
-First we'll create a separate layout for the log workout process so that we have a header (so far the app hasn't used any headers). The header contains useful things such as a title, and a back button. This is as simple as creating a `_layout.tsx` file in our `log-workout` folder with the following contents:
+First we'll create a separate layout for the log workout process so that we can add a header with a title and a back button. With Expo this is as simple as creating a `_layout.tsx` file in our `log-workout` folder with the following content:
 
 ```jsx
 import { Stack } from "expo-router";
@@ -133,7 +133,7 @@ Then call our API:
 ```ts
 async function handleStartWorkout() {
     const { workoutId } = await startWorkout({ sessionToken });
-    if(!workoutId) {
+    if (!workoutId) {
         Alert.alert("Failed to start workout, please try again.");
         return;
     }
@@ -142,9 +142,9 @@ async function handleStartWorkout() {
 }
 ```
 
-Now we have a workout ID, we need to persist it somewhere. I thought of two places I could store this:
-- In a global store
-- In a path variable, e.g. `/log-workout/{workoutId}/select-exercise`
+Now we have a workout ID, we need to persist it somewhere. I thought of two places that I could store this:
+1. In a global store
+2. In a path variable, e.g. `/log-workout/{workoutId}/select-exercise`
 
 I decided to put it in a global store for now, not because of any technical reason - simply because that's something I already know how to do.
 
@@ -189,14 +189,14 @@ export const useWorkoutStore = create(
 );
 ```
 
-Unlike `expo-secure-store` we don't need to write our own adapter to persist our store, because `AsyncStorage` satisfies `StateStorage`s interface.
+Unlike `expo-secure-store` we don't need to write our own adapter to persist our data - `AsyncStorage` satisfies `StateStorage`s interface.
 
 Then update our event handler to store the workout ID in the store:
 
 ```ts
 async function handleStartWorkout() {
     const { workoutId } = await startWorkout({ sessionToken });
-    if(workoutId === null) {
+    if (workoutId === null) {
         Alert.alert("Failed to start workout, please try again.");
         return;
     }
@@ -207,25 +207,25 @@ async function handleStartWorkout() {
 }
 ```
 
-The final thing, which I noticed whilst developing this screen is that when going through the "Start workout" flow, we'll end up with a bunch of workout IDs for abandoned workouts. To get around this, when you click "START", we'll check for any workouts that are in progress.
+One thing which I noticed whilst developing this screen is that when going through the "Start workout" flow, we end up with a bunch of workout IDs for workouts that were started, but not finished. To get around this, when you click "START", we'll check for any workouts that are in progress:
 
 ```ts
-if(workoutStore.hasWorkoutInProgress()) {
+if (workoutStore.hasWorkoutInProgress()) {
     console.log('Workout already started.');
     router.navigate('/log-workout/select-exercise');
     return;
 }
 ```
 
-In the future, we'll implement some sort of "Resume workout" functionality.
+In the future, we'll implement some sort of "Resume workout" functionality, but for now, we'll just send them into their workout.
 
 That's it for this screen, we now have the `workoutId` available throughout the process, which we'll need later on to log individual exercises.
 
 ### Select exercise screen
 
-This is where the user selects the exercise they want to perform. When the screen loads it will show a list of all exercies, and typing in the search box will filter down the search results. Because the list of exercises is small, I think we can get away with loading a list of ALL exercises, and just performing the filtering in memory with a primitive text search.
+This is where the user selects the exercise they want to perform. When the screen loads it will show a list of all exercises, and typing in the search box will filter them. Because the list of exercises is small (< 100), I think we can get away with loading a list of ALL exercises filtering in memory with a primitive text search.
 
-> **Side note** In the future, we'll improve this by performing the search operations on the server, this will be especially useful as the number of exercises increases.
+> **Side note:** In the future, we'll improve this by performing the search operations on the server, this will be especially useful as the number of exercises increase.
 
 I realised we don't actually have an endpoint which lists available exercises from our database, so let's write that quickly...
 
@@ -273,7 +273,7 @@ export default function SearchBox({ query, onChangeQuery }: SearchBoxProps) {
 }
 ```
 
-This component doesn't really do much, just propagates the `TextInput`s event to the parent component.
+This component doesn't really do much, just propagates the `TextInput`s `onChangeText` event to the parent component.
 
 And an `ExerciseList` for displaying the exercises:
 
@@ -284,11 +284,11 @@ type ExerciseListProps = {
 }
 
 export default function ExerciseList({ exercises, onSelectExercise }: ExerciseListProps) {
-    if(!exercises) {
+    if (!exercises) {
         return <Text>Loading exercises...</Text>
     }
 
-    if(exercises?.length === 0) {
+    if (exercises?.length === 0) {
         return <Text>No exercises found</Text>;
     }
 
@@ -334,7 +334,7 @@ useEffect(() => {
 />
 ```
 
-So now we have a list of exercises displayed, but the search box isn't filtering them, let's filter the list of exercises before it's passed a prop to `ExerciseList`. We could do this inside the `handleChangeQuery` event handler (which is invoked when the search box's text changes) we have:
+So now we have a list of exercises displayed, but the search box isn't filtering them, let's filter the list of exercises. We could do this inside the `handleChangeQuery` event handler (which is invoked when the search box's text changes):
 
 ```ts
 function handleChangeQuery(newQuery: string) {
@@ -380,11 +380,22 @@ Our exercise list is looking a bit bare, so at this point I'll update my migrati
 
 The only thing we have left to do now is keep track of the exercise that is currently selected, we can do this by storing it in our workout store after an exercise is selected:
 
+
+```jsx
+const setCurrentExercise = useWorkoutStore(state => state.setCurrentExercise);
+
+function handleSelectExercise(selectedExercise: Exercise) {
+    console.log('Selected', selectedExercise);
+    setCurrentExercise(selectedExercise);
+    router.navigate('/log-workout/exercise-summary');
+}
+```
+
 ### Exercise summary screen
 
-This screen displays a summary of all completed sets for the current exercise, and the user can add their performed exercises to a workout.
+This screen displays a list of completed sets for the currently selected exercise, and the user can also add their sets to the current exercise.
 
-We want the screen's header to be dynamic (display the currently selected exercise's name), which requires us to move the `<Stack.Screen>` component into the route file, so we remove it from `_layout.tsx` and add it to our `workout-add-exercise.tsx` route:
+We want the screen's header to be dynamic (display the currently selected exercise's name), which requires us to move the `<Stack.Screen>` component into the route file, so we remove it from `_layout.tsx` and add it to our `exercise-summary.tsx` route:
 
 ```jsx
 export default function ExerciseSummaryScreen() {
@@ -416,28 +427,133 @@ Our page contains two sections:
 - A button to send them to the **add exercise to workout screen**
 - A table containing completed sets
 
-To display the list of completed sets, we'll need to ask the server for completed sets with a specific `exercise_id` and a specific `workout_id`. We actually didn't build that endpoint, so first let's go ahead and write that:
+To display the list of completed sets, we'll need to ask the server for exercises completed with a specific `workout_id` and `exercise_id`. We actually didn't build this endpoint yet (another one I forgot!), so first let's go ahead and write that:
 
 ```java
-@GetMapping("/api/v1/workout/{workoutId}/exercise")
-public ResponseEntity<ApiResponse> handleListWorkoutExercises(
-    @PathVariable Integer workoutId, @AuthenticationPrincipal User user) {
-
-    var exercises = workoutService.listExercisesForWorkoutId(user, workoutId);
-    
-    return ResponseEntity.ok(new ListWorkoutExerciseResponse(exercises));
+@GetMapping("/api/v1/workout/{workoutId}/exercise/{exerciseId}")
+public ResponseEntity<ApiResponse> handleListCompletedSetsForExercise(
+        @PathVariable Integer workoutId, @PathVariable Integer exerciseId, @AuthenticationPrincipal User user) {
+    var completedSets = workoutService.listCompletedSetsForExercise(user, exerciseId, workoutId);
+    return ResponseEntity.ok(new ListCompletedSetsForExercise(completedSets));
 }
 ```
 
-Our performed exercises live in the database in the `workout_exercise` table, we could just return those to the client, but then the client would have to do some manual grouping of those so they could display them, a better alternative would be to return a structure like this:
+This endpoint returns data in the following format:
 
-```json
+```json5
+{
+    "completedSets": [
+        {
+            "id": 23,
+            "weight": 100.5,
+            "sets": 100,
+            "reps": 1,
+            // ... other fields ...
+        },
+        // .. rest
+    ]
+}
+```
+
+
+Now let's write a component to call this endpoint and display the completed sets, we'll call this component `<CompletedSets>`:
+
+```jsx
+type CompletedExercisesProps = {
+    exercise: Exercise | null,
+    workoutId: number | null
+}
+
+export default function CompletedSets({ exercise, workoutId }: CompletedExercisesProps) {
+    const authStore = useAuthStore();
+    const [completedSets, setCompletedSets] = useState<CompletedSet[]>([]);
+
+    useEffect(() => {
+        (async () => {
+            const { completedSets } = await listCompletedSetsForExercise({
+                sessionToken: authStore.sessionToken,
+                workoutId: workoutId,
+                exerciseId: exercise!.id
+            });
+            setCompletedSets(completedSets);
+        })();
+    }, [])
+
+    return (
+        <View>
+            <Heading>Completed sets for {String(exercise?.name)}</Heading>
+            <Text>There are {completedSets?.length} completed sets for this exercise</Text>
+            {/* todo */}
+        </View>
+    )
+}
+```
+
+And that's it for this screen, the final component looks like this:
+
+```jsx
+export default function ExerciseSummaryScreen() {
+    const workoutStore = useWorkoutStore();
+    const router = useRouter();
+    const params = useLocalSearchParams()
+
+    useEffect(() => {
+        router.setParams({
+            title: workoutStore.currentExercise?.name
+        });
+    }, []);
+    
+    return (
+        <ScreenLayout screenHasHeader={true}>
+            <Stack.Screen 
+                options={{
+                    title: params.title
+                }} 
+            />
+            <Box padding={20}>
+                <Button title="Add set" href="/log-workout/add-exercise-to-workout" />
+                
+                <CompletedSets 
+                    exercise={workoutStore.currentExercise} 
+                    workoutId={workoutStore.workoutId}
+                />
+            </Box>
+        </ScreenLayout>
+    )
+}
+```
+
+### Add exercise to workout screen
+
+This screen contains a form the user fills in to add a set to an exercise. 
+
+Let's write the form first:
+
+```jsx
+// todo
+```
+
+After submitting the form, we need to do call our endpoint `/api/v1/blah` to add the exercise to the workout, then send to user back to the **exercise summary page**:@
+
+```jsx
+// todo
+```
+
+### Workout summary screen
+
+ todo
+
+Our performed exercises live in the database in the `workout_exercise` table, we could just return those to the client, but then the client would have to do some manual grouping of those to display them, a better alternative would be to return a structure like this:
+
+```json5
 {
     "exercices": [
         {
+            // This is the `Exercise` model data
             "id": 1,
             "name": "Back squat",
             "performed": [
+                // This is the `WorkoutExercise` model data
                 {
                     "id": 23,
                     "weight": 100.5,
@@ -450,23 +566,50 @@ Our performed exercises live in the database in the `workout_exercise` table, we
 }
 ```
 
-This requires more code on the server, but means the client doesn't need to do anything except loop over the `exercises` array.
+This requires more code on the server, but means the client can just loop over the `exercises` array. 
 
-### Add exercise to workout screen
+Let's write our service method to achieve this:
 
-This screen contains a form the user fills in to add a set to an exercise. 
+```java
+public List<ExerciseWithCompletedSets> listExercisesForWorkoutId(@NotNull User user, @NotNull Integer workoutId) {
+    var workout = workoutDao.findOneWithUser(workoutId);
+    if (workout == null) {
+        return Collections.emptyList();
+    }
 
-The code looks something like this:
+    if (!workout.getUser().equals(user)) {
+        return Collections.emptyList();
+    }
 
-```jsx
-// todo
+    // Fetch ALL the exercises for this workout
+    var allWorkoutExercises = workoutExerciseDao.findAllByWorkoutId(workoutId);
+
+    // Create a map of Exercise => WorkoutExercise so it's easier to work with
+    Map<Exercise, List<WorkoutExercise>> exerciseToWorkoutExerciseMap = allWorkoutExercises.stream()
+        .collect(Collectors.groupingBy(WorkoutExercise::getExercise));
+
+    // Map it to our model
+    return exerciseToWorkoutExerciseMap.entrySet().stream().map(entry -> {
+        var exercise = entry.getKey();
+        var workoutExercises = entry.getValue();
+
+        var exerciseWithCompletedSets = new ExerciseWithCompletedSets();
+        exerciseWithCompletedSets.setId(exercise.getId());
+        exerciseWithCompletedSets.setName(exercise.getName());
+        
+        var completedSets = workoutExercises.stream()
+            .map(this::mapFromWorkoutExercise)
+            .toList();
+        exerciseWithCompletedSets.setCompleted(completedSets);
+
+        return exerciseWithCompletedSets;
+    }).toList();
+}
 ```
 
-After submitting the form, we need to do two things:
-1. Call our endpoint `/api/v1/blah` to add the exercise to the workout
-2. Save this exercise in some persistent storage, so that we can display it on the **exercise summary** screen.
+This is fairly simple, most of the complexity comes from mapping between our models `WorkoutExercise` and `Exercise` to our view models `ExerciseWithCompletedSets` and `CompletedSet`.
 
-### Workout summary screen
+One feature which I had totally forgotten about was `Collectors#groupingBy` which makes creating a map from a list a breeze - initially I wrote this by manually constructing the map before asking [Gemini](https://gemini.google.com/) if there was a simpler way to write it.
 
 ### Confirmation modal
 
