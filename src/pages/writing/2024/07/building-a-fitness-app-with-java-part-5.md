@@ -416,7 +416,41 @@ Our page contains two sections:
 - A button to send them to the **add exercise to workout screen**
 - A table containing completed sets
 
-...
+To display the list of completed sets, we'll need to ask the server for completed sets with a specific `exercise_id` and a specific `workout_id`. We actually didn't build that endpoint, so first let's go ahead and write that:
+
+```java
+@GetMapping("/api/v1/workout/{workoutId}/exercise")
+public ResponseEntity<ApiResponse> handleListWorkoutExercises(
+    @PathVariable Integer workoutId, @AuthenticationPrincipal User user) {
+
+    var exercises = workoutService.listExercisesForWorkoutId(user, workoutId);
+    
+    return ResponseEntity.ok(new ListWorkoutExerciseResponse(exercises));
+}
+```
+
+Our performed exercises live in the database in the `workout_exercise` table, we could just return those to the client, but then the client would have to do some manual grouping of those so they could display them, a better alternative would be to return a structure like this:
+
+```json
+{
+    "exercices": [
+        {
+            "id": 1,
+            "name": "Back squat",
+            "performed": [
+                {
+                    "id": 23,
+                    "weight": 100.5,
+                    "sets": 100,
+                    "reps": 1
+                }
+            ]
+        }
+    ]
+}
+```
+
+This requires more code on the server, but means the client doesn't need to do anything except loop over the `exercises` array.
 
 ### Add exercise to workout screen
 
