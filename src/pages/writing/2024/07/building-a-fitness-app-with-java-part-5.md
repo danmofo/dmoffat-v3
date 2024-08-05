@@ -76,7 +76,7 @@ We don't know how this will perform in practice until we actually use it during 
 
 ## Building screens
 
-We've already built the APIs that power these screens, so most of the coding we'll do will be writing the screen layouts and talking to our APIs.
+We've already built the APIs that power these screens, so most of the coding we'll do will be writing the screen layouts and talking to our APIs. We'll try and get something minimal working first, and then work on improving it afterwards.
 
 ### Layout
 
@@ -483,13 +483,34 @@ export default function CompletedSets({ exercise, workoutId }: CompletedExercise
         <View>
             <Heading>Completed sets for {String(exercise?.name)}</Heading>
             <Text>There are {completedSets?.length} completed sets for this exercise</Text>
-            {/* todo */}
+            <View>
+                <View style={styles.tableHeader}>
+                    <Text style={styles.tableHeaderCol}>Sets</Text>
+                    <Text style={styles.tableHeaderCol}>Reps</Text>
+                    <Text style={styles.tableHeaderCol}>Weight</Text>
+                </View>
+                <FlatList
+                    style={{}}
+                    data={completedSets}
+                    renderItem={({ item: completedSet }) => (
+                        <Pressable
+                            style={styles.tableRow}
+                            onPress={() => {}}>
+                                <Text style={styles.tableCol}>{completedSet.sets}</Text>
+                                <Text style={styles.tableCol}>{completedSet.reps}</Text>
+                                <Text style={styles.tableCol}>{completedSet.weight}kg</Text>
+                        </Pressable>
+                    )}
+                />
+            </View>
         </View>
     )
 }
 ```
 
-And that's it for this screen, the final component looks like this:
+It contains an extremely quick implementation of a table just to get the data displayed - we will improve it later on and add other features like sorting, column totals, and buttons to remove/edit sets.
+
+And that's it for this screen, the final screen looks like this:
 
 ```jsx
 export default function ExerciseSummaryScreen() {
@@ -530,18 +551,174 @@ This screen contains a form the user fills in to add a set to an exercise.
 Let's write the form first:
 
 ```jsx
-// todo
+export default function AddExerciseToWorkoutScreen() {
+    const { 
+        control, 
+        handleSubmit,
+        formState: { errors },
+        getValues
+    } = useForm<AddExerciseForm>({
+        mode: "all",
+        defaultValues: {
+            weight: 0,
+            sets: 1,
+            reps: 1,
+            notes: '',
+            equipment: ''
+        }
+    });
+
+    return (
+        <ScreenLayout screenHasHeader={true}>
+            <Box padding={20}>
+                {/* Weight */}
+                <View style={formStyles.inputContainer}>
+                    <Text style={formStyles.label}>Weight</Text>
+                    <Controller 
+                        control={control}
+                        name="weight"
+                        rules={{
+                            min: {
+                                value: 1,
+                                message: 'Weight must be at least 1KG'
+                            }
+                        }} 
+                        render={({ field: { onChange, value } }) => (
+                            <TextInput 
+                                value={String(value)}
+                                onChangeText={onChange}
+                                style={formStyles.input}
+                            />
+                        )}
+                    />
+                    <FieldErrorMessage fieldError={errors.weight} />
+                </View>
+
+                {/* Sets */}
+                <View style={formStyles.inputContainer}>
+                    <Text style={formStyles.label}>Sets</Text>
+                    <Controller 
+                        control={control}
+                        name="sets"
+                        rules={{}} 
+                        render={({ field: { onChange, value } }) => (
+                            <TextInput 
+                                value={String(value)}
+                                onChangeText={onChange}
+                                style={formStyles.input}
+                            />
+                        )}
+                    />
+                    <FieldErrorMessage fieldError={errors.sets} />
+                </View>
+
+                {/* Reps */}
+                <View style={formStyles.inputContainer}>
+                    <Text style={formStyles.label}>Reps</Text>
+                    <Controller 
+                        control={control}
+                        name="reps"
+                        rules={{}} 
+                        render={({ field: { onChange, value } }) => (
+                            <TextInput 
+                                value={String(value)}
+                                onChangeText={onChange}
+                                style={formStyles.input}
+                            />
+                        )}
+                    />
+                    <FieldErrorMessage fieldError={errors.reps} />
+                </View>
+
+                {/* Notes */}
+                <View style={formStyles.inputContainer}>
+                    <Text style={formStyles.label}>Notes</Text>
+                    <Controller 
+                        control={control}
+                        name="notes"
+                        rules={{}} 
+                        render={({ field: { onChange, value } }) => (
+                            <TextInput 
+                                value={String(value)}
+                                onChangeText={onChange}
+                                style={formStyles.input}
+                            />
+                        )}
+                    />
+                    <FieldErrorMessage fieldError={errors.notes} />
+                </View>
+
+                {/* Equipment */}
+                <View style={formStyles.inputContainer}>
+                    <Text style={formStyles.label}>Equipment</Text>
+                    <Controller 
+                        control={control}
+                        name="equipment"
+                        rules={{}} 
+                        render={({ field: { onChange, value } }) => (
+                            <TextInput 
+                                value={String(value)}
+                                onChangeText={onChange}
+                                style={formStyles.input}
+                            />
+                        )}
+                    />
+                    <FieldErrorMessage fieldError={errors.equipment} />
+                </View>
+
+                <Button 
+                    title="Add"
+                    onPress={handleSubmit(() => {})}
+                />
+            </Box>
+        </ScreenLayout>
+    )
+}
 ```
 
-After submitting the form, we need to do call our endpoint `/api/v1/blah` to add the exercise to the workout, then send to user back to the **exercise summary page**:@
+Very simple stuff.
+
+After submitting the form, we need to call our endpoint `/api/v1/workout/{workoutId}/exercise/` to add the exercise to the workout, then send to user back to the **exercise summary page**:
 
 ```jsx
-// todo
+async function handleAddSet() {
+    console.log('Adding set', getValues());
+    setIsLoading(true);
+
+    const formValues = getValues();
+    const { success } = await logExercise({
+        workoutId: workoutStore.workoutId!,
+        exerciseId: workoutStore.currentExercise?.id!,
+        weight: formValues.weight,
+        sets: formValues.sets,
+        reps: formValues.reps,
+        notes: formValues.notes,
+        equipment: formValues.equipment.split(','),
+        sessionToken: authStore.sessionToken
+    });
+
+    if(!success) {
+        console.error('Failed to log workout');
+        // todo: Handle server-side validation errors.
+    } else {
+        // No need to navigate anywhere, just pop the screen off the navigation stack.
+        router.dismiss();
+    }
+
+    setIsLoading(false);
+}
 ```
+
+This is a very primitive implementation, it doesn't handle a number of things:
+- Server-side validation response
+- Failed requests
+- Request cancelling
+
+For now it will suffice - we'll improve it later on.
 
 ### Workout summary screen
 
- todo
+This screen lists 
 
 Our performed exercises live in the database in the `workout_exercise` table, we could just return those to the client, but then the client would have to do some manual grouping of those to display them, a better alternative would be to return a structure like this:
 
