@@ -26,7 +26,6 @@ series_posts:
   - [Add exercise to workout screen](#add-exercise-to-workout-screen)
   - [Workout summary screen](#workout-summary-screen)
   - [Confirmation modal](#confirmation-modal)
-  - [Success screen](#success-screen)
 - [Conclusion](#conclusion)
 
 ## What we're going to work on
@@ -70,7 +69,7 @@ The flow is:
   - View their existing exercises (and edit them if needed)
   - Finish the workout.
 - Clicking the finish workout button will prompt the user with a **confirmation modal**, asking them if they want to finish the workout. The initial version won't have a way to edit workouts so we need an additional barrier to stop users accidentally clicking the button.
-- After confirming the workout is finished, they'll be shown a **success screen**.
+- After confirming the workout is finished, they'll be sent back to the initial screen.
 
 We don't know how this will perform in practice until we actually use it during a workout, but it's a good starting point.
 
@@ -315,7 +314,7 @@ export default function ExerciseList({ exercises, onSelectExercise }: ExerciseLi
 
 In the parent component, we'll fetch the list of exercises and provide it as a prop to `ExerciseList` (I could have used `react-query` to fetch the exercises, but for now we'll just do it manually):
 
-```ts
+```jsx
 const [exercises, setExercises] = useState<Exercise[]>([]);
 
 useEffect(() => {
@@ -455,58 +454,58 @@ This endpoint returns data in the following format:
 }
 ```
 
-
-Now let's write a component to call this endpoint and display the completed sets, we'll call this component `<CompletedSets>`:
+Now let's write a component to display the completed sets, we'll call this component `<CompletedSets>`:
 
 ```jsx
 type CompletedExercisesProps = {
-    exercise: Exercise | null,
-    workoutId: number | null
+    completedSets: CompletedSet[]
 }
 
-export default function CompletedSets({ exercise, workoutId }: CompletedExercisesProps) {
-    const authStore = useAuthStore();
-    const [completedSets, setCompletedSets] = useState<CompletedSet[]>([]);
-
-    useEffect(() => {
-        (async () => {
-            const { completedSets } = await listCompletedSetsForExercise({
-                sessionToken: authStore.sessionToken,
-                workoutId: workoutId,
-                exerciseId: exercise!.id
-            });
-            setCompletedSets(completedSets);
-        })();
-    }, [])
-
+export default function CompletedSets({ completedSets }: CompletedExercisesProps) {
     return (
         <View>
-            <Heading>Completed sets for {String(exercise?.name)}</Heading>
-            <Text>There are {completedSets?.length} completed sets for this exercise</Text>
-            <View>
-                <View style={styles.tableHeader}>
-                    <Text style={styles.tableHeaderCol}>Sets</Text>
-                    <Text style={styles.tableHeaderCol}>Reps</Text>
-                    <Text style={styles.tableHeaderCol}>Weight</Text>
-                </View>
-                <FlatList
-                    style={{}}
-                    data={completedSets}
-                    renderItem={({ item: completedSet }) => (
-                        <Pressable
-                            style={styles.tableRow}
-                            onPress={() => {}}>
-                                <Text style={styles.tableCol}>{completedSet.sets}</Text>
-                                <Text style={styles.tableCol}>{completedSet.reps}</Text>
-                                <Text style={styles.tableCol}>{completedSet.weight}kg</Text>
-                        </Pressable>
-                    )}
-                />
+            <View style={styles.tableHeader}>
+                <Text style={styles.tableHeaderCol}>Sets</Text>
+                <Text style={styles.tableHeaderCol}>Reps</Text>
+                <Text style={styles.tableHeaderCol}>Weight</Text>
             </View>
+            <FlatList
+                style={{}}
+                data={completedSets}
+                renderItem={({ item: completedSet }) => (
+                    <Pressable
+                        style={styles.tableRow}
+                        onPress={() => {}}>
+                            <Text style={styles.tableCol}>{completedSet.sets}</Text>
+                            <Text style={styles.tableCol}>{completedSet.reps}</Text>
+                            <Text style={styles.tableCol}>{completedSet.weight}kg</Text>
+                    </Pressable>
+                )}
+            />
         </View>
     )
 }
+
+const styles = StyleSheet.create({
+    tableHeader: {
+        flexDirection: 'row'
+    },
+    tableHeaderCol: {
+        flex: 1,
+        fontWeight: 'bold',
+        fontSize: 24
+    },
+    tableCol: {
+        flex: 1,
+        fontSize: 18
+    },
+    tableRow: {
+        flexDirection: 'row'
+    }
+});
 ```
+
+I haven't done any data fetching inside this component because we'll use it on our exercise summary screen which can display multiple exercises, so if there are 20 exercises, we'll end up making 20 API calls, which is very wasteful.
 
 It contains an extremely quick implementation of a table just to get the data displayed - we will improve it later on and add other features like sorting, column totals, and buttons to remove/edit sets.
 
@@ -517,11 +516,24 @@ export default function ExerciseSummaryScreen() {
     const workoutStore = useWorkoutStore();
     const router = useRouter();
     const params = useLocalSearchParams()
+    const authStore = useAuthStore();
+    const [completedSets, setCompletedSets] = useState<CompletedSet[]>([]);
 
     useEffect(() => {
         router.setParams({
             title: workoutStore.currentExercise?.name
         });
+
+        async function init() {
+            const { completedSets } = await listCompletedSetsForExercise({
+                sessionToken: authStore.sessionToken,
+                workoutId: workoutStore.workoutId!,
+                exerciseId: workoutStore.currentExercise!.id
+            });
+            setCompletedSets(completedSets);
+        }
+
+        init();
     }, []);
     
     return (
@@ -534,15 +546,14 @@ export default function ExerciseSummaryScreen() {
             <Box padding={20}>
                 <Button title="Add set" href="/log-workout/add-exercise-to-workout" />
                 
-                <CompletedSets 
-                    exercise={workoutStore.currentExercise} 
-                    workoutId={workoutStore.workoutId}
-                />
+                <CompletedSets completedSets={completedSets} />
             </Box>
         </ScreenLayout>
     )
 }
 ```
+
+> **Side note**, we'll replace the fetching inside `useEffect` with `react-query` later on, for now I'm just trying to get something working. I'm fully aware the data will not be re-fetched when it updates!
 
 ### Add exercise to workout screen
 
@@ -714,21 +725,22 @@ This is a very primitive implementation, it doesn't handle a number of things:
 - Failed requests
 - Request cancelling
 
-For now it will suffice - we'll improve it later on.
+For now it will suffice - as with most other things in this post....we'll improve it later on!
 
 ### Workout summary screen
 
-This screen lists 
+This screen lists all of the exercises that have been performed for the current workout.
 
-Our performed exercises live in the database in the `workout_exercise` table, we could just return those to the client, but then the client would have to do some manual grouping of those to display them, a better alternative would be to return a structure like this:
+Our performed exercises live in the database in the `workout_exercise` table, we could just return those to the client, but then the client would have to do some manual grouping to display them, a better alternative would be to return a structure like this:
 
 ```json5
 {
-    "exercices": [
+    "exercises": [
         {
             // This is the `Exercise` model data
             "id": 1,
             "name": "Back squat",
+            // ...other Exercise props
             "performed": [
                 // This is the `WorkoutExercise` model data
                 {
@@ -788,14 +800,133 @@ This is fairly simple, most of the complexity comes from mapping between our mod
 
 One feature which I had totally forgotten about was `Collectors#groupingBy` which makes creating a map from a list a breeze - initially I wrote this by manually constructing the map before asking [Gemini](https://gemini.google.com/) if there was a simpler way to write it.
 
+Now we can create a screen which calls this endpoint on mount, then displays completed sets with our `CompletedSets` component:
+
+```jsx
+export default function SummaryScreen() {
+    const workoutId = useWorkoutStore(state => state.workoutId);
+    const sessionToken = useAuthStore(state => state.sessionToken);
+    const [exercises, setExercises] = useState<ExerciseWithCompletedSets[]>([]);
+
+    useEffect(() => {
+        async function init() {
+            if (!workoutId) {
+                return;
+            }
+
+            const { exercises } = await listWorkoutExercises({
+                sessionToken,
+                workoutId
+            });
+
+            setExercises(exercises);
+        }
+
+        init();
+    }, [])
+
+    // todo: Add loading state
+
+    // No exercises for this workout yet.
+    if (!exercises || !exercises.length) {
+        return (
+            <ScreenLayout screenHasHeader={false}>
+                <Box padding={20}>
+                    <Text>No exercises have been logged for this workout yet.</Text>
+                </Box>
+            </ScreenLayout>
+        )
+    }
+
+    return (
+        <ScreenLayout screenHasHeader={false}>
+            <Box padding={20}>
+                <Text>Here is your workout summary...</Text>
+                {
+                    exercises.map(exercise => {
+                        return (
+                            <View key={exercise.id}>
+                                <Heading>{exercise.name}</Heading>
+                                <CompletedSets completedSets={exercise.completed} />
+                            </View>
+                        )
+                    })
+                }
+
+                <Button title="Add new exercise" href="/log-workout/select-exercise" />
+                <Button title="Finish workout" onPress={() => {}} />
+            </Box>
+        </ScreenLayout>
+    )
+}
+```
+
+Again, this is very primitive, but works fine for this initial version.
+
 ### Confirmation modal
 
-### Success screen
+This modal's purpose it to get confirmation from the user before completing their workout. It prevents users from prematurely completing their workout.
+
+For the initial implementation we'll just use React Native's `Alert` ([link](https://reactnative.dev/docs/alert)) component, and hook it up to an event handler like so:
+
+```jsx
+async function handleConfirmFinishWorkout() {
+    Alert.alert(
+        'Confirm finish workout',
+        'Are you sure you want to finish your workout?',
+        [
+            {
+                text: 'Cancel',
+                style: 'cancel'
+            },
+            {
+                text: 'Yes',
+                onPress: () => {
+                    handleFinishWorkout();
+                }
+            }
+        ]
+    )
+}
+
+async function handleFinishWorkout() {
+    console.log('User wants to finish their workout');
+    
+    const { success } = await finishWorkout({
+        sessionToken,
+        workoutId
+    });
+
+    if (!success) {
+        Alert.alert('Failed to finish workout');
+        return;
+    }
+
+    console.log('Workout finished.');
+    
+    // Get rid of workout state
+    clear();
+
+    // Go back to the first screen
+    router.dismissAll();
+}  
+```
+
+Clicking the button correctly finishes the workout in the database, and takes us back to the first screen in our app.
 
 ## Conclusion
 
-We've now built a rough version of the main functionality in our app.
+We've now built a rough version of the main functionality in our app - there's still a great deal to improve on:
+- Using `react-query` instead of ad-hoc API calls in `useEffect`s
+- Better handling of loading and error states for API calls
+- Fixing bugs where the data on the screen is stale, one example: when you add a set to an exercise and go back to the exercise summary screen, it doesn't show the new set until you go back and revisit the screen.
+- Standardising the terminology used on client and the server (and improving the names)
+- Missing functionality:
+  - You cannot edit/delete sets or exercises
+  - You cannot add notes to the workout
+  - Notes and equipment aren't displayed for each exercise
+  - ...and more
 
-In the next part, we'll...
+Writing posts as I go along has been fun, but has also been a lot more time consuming than just building the app. Going forward I'm only going to create posts on smaller pieces of work (refactoring, solving a specific bug, etc) instead of documenting every single step of the process - this may change depending on available time and motivation.
 
 [Bye for now](https://www.youtube.com/watch?v=JgFvNzLAWtY)
