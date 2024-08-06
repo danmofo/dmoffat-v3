@@ -1,0 +1,1 @@
+- Pin Docker image versions - e.g. instead of `FROM node:lts`, require a specific node version.
