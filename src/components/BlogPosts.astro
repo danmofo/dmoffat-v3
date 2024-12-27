@@ -9,11 +9,14 @@ type Props = {
 
 const { excludeDrafts, maxPosts } = Astro.props;
 
+// Grab all blog posts and sort them by 'pubDate'
 const allPosts = await Astro.glob('../pages/writing/*/*/*.md');
-const posts = allPosts.slice(0, Math.min(allPosts.length, maxPosts));
-posts.sort((a, b) => {
+allPosts.sort((a, b) => {
     return b.frontmatter.pubDate.localeCompare(a.frontmatter.pubDate);
 });
+
+// Restrict to the number of posts to want to show
+const posts = allPosts.slice(0, Math.min(allPosts.length, maxPosts));
 
 ---
 
