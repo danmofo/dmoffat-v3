@@ -10,6 +10,7 @@ type Props = {
 const { excludeDrafts, maxPosts } = Astro.props;
 
 // Grab all blog posts and sort them by 'pubDate'
+// todo: This is deprecated now, see: https://docs.astro.build/en/guides/upgrade-to/v5/#deprecated-astroglob
 const allPosts = await Astro.glob('../pages/writing/*/*/*.md');
 allPosts.sort((a, b) => {
     return b.frontmatter.pubDate.localeCompare(a.frontmatter.pubDate);
