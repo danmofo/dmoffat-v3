@@ -11,11 +11,17 @@ You need the following software to develop and build the website:
 You need the following software to deploy the website:
 - Docker
 - `jq`
-- `doctl`
+- `doctl` - you'll need a DigitalOcean access key for this with 'domain' and 'registry' permissions
 
 Some scripts will check for the existence of this software and tell you if it's missing, but some will not!
 
 ## Developing
+
+Install the dependencies:
+
+```bash
+npm i
+```
 
 This command starts the Astro dev server in host mode (so you can open on your mobile device too):
 
@@ -44,7 +50,6 @@ To deploy:
 ```
 
 The script will tell you if anything went wrong and what to do.
-
 
 ### Generating new certificates
 
