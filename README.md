@@ -11,7 +11,7 @@ You need the following software to develop and build the website:
 You need the following software to deploy the website:
 - Docker
 - `jq`
-- `doctl` - you'll need a DigitalOcean access key for this with 'domain' and 'registry' permissions
+- `doctl` - you'll need a DigitalOcean access key for this with 'domain' and 'registry' permissions, initialise it using `doctl auth init`
 
 Some scripts will check for the existence of this software and tell you if it's missing, but some will not!
 
