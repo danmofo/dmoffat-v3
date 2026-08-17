@@ -1,7 +1,6 @@
 ---
 layout: '@layouts/BlogLayout.astro'
 title: 'Changing my dev workflow and keyboard...at the same time'
-draft: true
 pubDate: 2024-12-27 15:36
 description: 'Musings about drastically changing my workflow and keyboard.'
 ---
