@@ -2,7 +2,6 @@
 
 This is version 3 of my personal website, built with Astro, currently deployed on [https://www.dmoffat.com](https://www.dmoffat.com).
 
-
 ## Prerequisites
 
 You need the following software to develop and build the website:

@@ -2,6 +2,7 @@
 
 # This script builds + deploys the website on my DigitalOcean VPS
 # It assumes you've got SSH access, and a private key in ~/.ssh/do_dmoffat.com
+set -euo pipefail
 
 echo "Deploying website..."
 
@@ -10,36 +11,34 @@ source .env
 # Build and publish the nginx container
 ./build-publish-nginx
 
-if [[ "$?" != "0" ]]; then
-    echo "Failed to build + publish the nginx container."
-    exit 1
-fi
+# Deploy remotely
+ssh -i ~/.ssh/do_dmoffat.com dmoffat.com -p 9999 "DO_TOKEN='$DIGITALOCEAN_API_KEY' bash -s" << 'EOF'
+    set -euo pipefail
 
-# Deploy it remotely
-ssh -i ~/.ssh/do_dmoffat.com dmoffat.com -p 9999 /bin/bash << EOF
     echo "Authenticating with the registry"
-
-    docker login -u danmofo@gmail.com -p $DIGITALOCEAN_API_KEY registry.digitalocean.com
-    if [[ "$?" != "0" ]]; then
-        echo "Failed to authenticate with container registry"
-        exit 1
-    fi
+    docker login -u danmofo@gmail.com -p "$DO_TOKEN" registry.digitalocean.com
 
     echo "Pulling the container..."
     docker pull registry.digitalocean.com/dmoffat/dmoffat-nginx:latest
-    if [[ "$?" != "0" ]]; then
-        echo "Failed to pull container from container registry"
-        exit 1
-    fi
-    
+
+    # Shared with the trips container, which this nginx proxies to by container name. Idempotent —
+    # whichever project deploys first creates it.
+    docker network create web 2>/dev/null || true
+
     echo "Killing existing container..."
-    docker container kill dmoffat-nginx
-    docker container rm dmoffat-nginx
+    docker rm -f dmoffat-nginx 2>/dev/null || true
 
     echo "Running new container..."
-    docker run -d -p 80:8080 -p 443:8443 --name dmoffat-nginx registry.digitalocean.com/dmoffat/dmoffat-nginx
-    if [[ "$?" != "0" ]]; then
-        echo "Failed to start new container - website is currently down."
-        exit 1
-    fi
+    docker run -d \
+        -p 80:8080 \
+        -p 443:8443 \
+        --network web \
+        --restart unless-stopped \
+        --name dmoffat-nginx \
+        registry.digitalocean.com/dmoffat/dmoffat-nginx
+
+    echo "Running:"
+    docker ps --filter name=dmoffat-nginx --format '{{.Names}}  {{.Status}}'
 EOF
+
+echo "Deployed. Check https://www.dmoffat.com"
